@@ -22,7 +22,7 @@ AutoGo/
 
 1. **Clonar o ubicarse en el directorio del proyecto**
 ```bash
-cd /home/angel/Escritorio/AutoGo
+cd Escritorio/AutoGo
 ```
 
 2. **Construir y ejecutar todos los servicios**
@@ -298,24 +298,6 @@ docker exec -it autogo_postgres psql -U autogo -d autogo_db
 
 ---
 
-## 🐛 Solución de Problemas
-
-### Error: "Connection refused" en app móvil
-
-- Verifica que el backend esté corriendo
-- Usa la IP correcta según tu dispositivo/emulador
-- Desactiva el firewall temporalmente para pruebas locales
-
-### Error: "Port already in use"
-
-```bash
-# Liberar puerto 8000
-sudo lsof -ti:8000 | xargs kill -9
-
-# Liberar puerto 80
-sudo lsof -ti:80 | xargs kill -9
-```
-
 ### Resetear base de datos
 
 ```bash
@@ -324,47 +306,6 @@ docker-compose up --build
 ```
 
 ---
-
-## 📦 Despliegue en Google Cloud Run
-
-### Backend
-
-```bash
-cd backend
-gcloud builds submit --tag gcr.io/[PROJECT-ID]/autogo-backend
-gcloud run deploy autogo-backend --image gcr.io/[PROJECT-ID]/autogo-backend --platform managed
-```
-
-### Frontend
-
-```bash
-cd frontend
-gcloud builds submit --tag gcr.io/[PROJECT-ID]/autogo-frontend
-gcloud run deploy autogo-frontend --image gcr.io/[PROJECT-ID]/autogo-frontend --platform managed
-```
-
----
-
-## 📄 Licencia
-
-Proyecto educativo - AutoGo 2026
-
----
-
-## 👨‍💻 Desarrollo
-
-**Ciclo 1 completado** ✅
-**Ciclo 2 completado** ✅
-
-### 🎯 Estado Actual del Proyecto
-
-```
-Backend API (FastAPI 2.0.0):  ✅ 100% - 34 endpoints operativos
-Frontend Web (Angular):       ✅ 100% - Dashboard de talleres completo
-Mobile App (Flutter):         ✅ 100% - UI actualizada para CICLO 2
-Database (PostgreSQL):        ✅ 100% - Todas las tablas creadas
-Documentación:                ✅ 100% - Swagger docs + README
-```
 
 ### 🚀 Características Destacadas
 
@@ -391,27 +332,3 @@ Documentación:                ✅ 100% - Swagger docs + README
    - Cálculo de rutas y distancias
    - Visualización en mapas interactivos
 
-### 📋 Próximos Ciclos (Opcionales)
-
-**Ciclo 3 - Tiempo Real y Notificaciones:**
-- WebSockets para actualizaciones en vivo
-- Notificaciones push (Firebase Cloud Messaging)
-- Chat en vivo entre cliente y técnico
-- Tracking en tiempo real del técnico
-
-**Ciclo 4 - IA y Análisis Avanzado:**
-- Integración real con OpenAI para clasificación
-- Análisis predictivo de demanda
-- Recomendación inteligente de talleres
-- Detección de fraude
-
-**Ciclo 5 - Features Avanzados:**
-- Sistema de rating y reviews
-- Programa de fidelidad
-- Reportes en PDF
-- Panel de analytics avanzado
-- Integración con pasarelas de pago (Stripe, PayPal)
-
----
-
-¿Necesitas ayuda? Revisa la documentación del API en http://localhost:8000/docs
