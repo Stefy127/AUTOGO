@@ -1,0 +1,555 @@
+<div class="workshop-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">🔧</div>
+      <h2>{{ workshop?.name || 'Mi Taller' }}</h2>
+      <p class="subtitle">Panel de Control</p>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button 
+        class="nav-item" 
+        [class.active]="currentView === 'dashboard'"
+        (click)="navigateTo('dashboard')">
+        <span class="icon">📊</span>
+        <span>Dashboard</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="currentView === 'edit-info'"
+        (click)="navigateTo('edit-info')">
+        <span class="icon">⚙️</span>
+        <span>Editar Información</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="currentView === 'add-technician'"
+        (click)="navigateTo('add-technician')">
+        <span class="icon">👨‍🔧</span>
+        <span>Agregar Mecánico</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="currentView === 'incidents-available'"
+        (click)="navigateTo('incidents-available')">
+        <span class="icon">🆕</span>
+        <span>Emergencias Disponibles</span>
+        <span class="badge-count" *ngIf="availableIncidents.length > 0">{{ availableIncidents.length }}</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="currentView === 'incidents-history'"
+        (click)="navigateTo('incidents-history')">
+        <span class="icon">📜</span>
+        <span>Historial</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout" (click)="logout()">
+        🚪 Cerrar Sesión
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Header -->
+    <header class="content-header">
+      <h1 *ngIf="currentView === 'dashboard'">Dashboard Principal</h1>
+      <h1 *ngIf="currentView === 'edit-info'">{{ workshop ? 'Editar Información' : 'Registrar Taller' }}</h1>
+      <h1 *ngIf="currentView === 'add-technician'">Agregar Mecánico</h1>
+      <h1 *ngIf="currentView === 'incidents-available'">Emergencias Disponibles</h1>
+      <h1 *ngIf="currentView === 'incidents-history'">Historial de Emergencias</h1>
+    </header>
+
+    <!-- Error Message -->
+    <div class="alert alert-error" *ngIf="error">
+      ⚠️ {{ error }}
+      <button class="close-btn" (click)="error = ''">×</button>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-container" *ngIf="loading">
+      <div class="spinner"></div>
+      <p>Cargando datos...</p>
+    </div>
+
+    <!-- VIEW: Dashboard Principal -->
+    <div class="view-container" *ngIf="!loading && currentView === 'dashboard'">
+      <!-- Workshop Info Card -->
+      <div class="info-card">
+        <h3>📍 Información del Taller</h3>
+        <div class="info-grid" *ngIf="workshop">
+          <div class="info-item">
+            <label>Nombre:</label>
+            <span>{{ workshop.name }}</span>
+          </div>
+          <div class="info-item">
+            <label>Dirección:</label>
+            <span>{{ workshop.address || 'No especificada' }}</span>
+          </div>
+          <div class="info-item">
+            <label>Teléfono:</label>
+            <span>{{ workshop.phone || 'No especificado' }}</span>
+          </div>
+          <div class="info-item">
+            <label>Estado:</label>
+            <span class="status-badge" [class.active]="workshop.is_active">
+              {{ workshop.is_active ? '✓ Activo' : '⏸ Inactivo' }}
+            </span>
+          </div>
+          <div class="info-item">
+            <label>Comisión:</label>
+            <span>{{ (workshop.commission_rate * 100).toFixed(0) }}%</span>
+          </div>
+          <div class="info-item">
+            <label>Mecánicos:</label>
+            <span>{{ technicians.length }} registrados</span>
+          </div>
+        </div>
+        <div class="no-workshop" *ngIf="!workshop">
+          <p>⚠️ No has configurado tu taller aún</p>
+          <button class="btn-primary" (click)="navigateTo('edit-info')">Configurar Ahora</button>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="stats-row" *ngIf="stats">
+        <div class="stat-box">
+          <div class="stat-icon">📊</div>
+          <div class="stat-content">
+            <h4>{{ stats.total_incidents }}</h4>
+            <p>Total Atendidas</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">⏳</div>
+          <div class="stat-content">
+            <h4>{{ stats.in_progress_incidents }}</h4>
+            <p>En Progreso</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">✅</div>
+          <div class="stat-content">
+            <h4>{{ stats.completed_incidents }}</h4>
+            <p>Completadas</p>
+          </div>
+        </div>
+        <div class="stat-box earnings">
+          <div class="stat-icon">💰</div>
+          <div class="stat-content">
+            <h4>\${{ getTotalEarnings().toFixed(2) }}</h4>
+            <p>Ganancias Totales</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technicians Progress -->
+      <div class="section-card" *ngIf="technicians.length > 0">
+        <h3>👨‍🔧 Rendimiento de Mecánicos</h3>
+        <div class="technician-progress" *ngFor="let techStat of getTechnicianStats()">
+          <div class="progress-header">
+            <span class="tech-name">{{ techStat.name }}</span>
+            <span class="tech-count">{{ techStat.incidents }} emergencias</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" [style.width.%]="techStat.percentage"></div>
+          </div>
+        </div>
+        <p class="no-data" *ngIf="getTechnicianStats().length === 0">
+          No hay emergencias completadas aún
+        </p>
+      </div>
+
+      <!-- Recent Incidents -->
+      <div class="section-card">
+        <h3>📌 Emergencias Recientes</h3>
+        <div class="incidents-table" *ngIf="myIncidents.length > 0">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Descripción</th>
+                <th>Cliente</th>
+                <th>Mecánico</th>
+                <th>Estado</th>
+                <th>Prioridad</th>
+                <th>Fecha</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let incident of myIncidents.slice(0, 5)">
+                <td>#{{ incident.id }}</td>
+                <td>{{ incident.description | slice:0:40 }}...</td>
+                <td>{{ incident.user?.full_name }}</td>
+                <td>{{ incident.technician?.name || '-' }}</td>
+                <td>
+                  <span class="badge" [ngClass]="getStatusClass(incident.status)">
+                    {{ getStatusText(incident.status) }}
+                  </span>
+                </td>
+                <td>
+                  <span [ngClass]="getPriorityClass(incident.priority)">
+                    {{ getPriorityText(incident.priority) }}
+                  </span>
+                </td>
+                <td>{{ incident.created_at | date:'short' }}</td>
+                <td>
+                  <button 
+                    *ngIf="incident.status === 'accepted'" 
+                    class="btn-action btn-start"
+                    (click)="startIncident(incident)"
+                    title="Iniciar servicio">
+                    🔧 Iniciar
+                  </button>
+                  <button 
+                    *ngIf="incident.status === 'in_progress'" 
+                    class="btn-action btn-complete"
+                    (click)="completeIncident(incident)"
+                    title="Marcar como completada">
+                    ✅ Completar
+                  </button>
+                  <span *ngIf="incident.status === 'completed' || incident.status === 'cancelled'" class="text-muted">
+                    -
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="no-data" *ngIf="myIncidents.length === 0">
+          No hay emergencias asignadas
+        </p>
+      </div>
+    </div>
+
+    <!-- VIEW: Edit Workshop Info -->
+    <div class="view-container" *ngIf="!loading && currentView === 'edit-info'">
+      <div class="form-card">
+        <form (ngSubmit)="saveWorkshopInfo()">
+          <div class="form-group">
+            <label>Nombre del Taller *</label>
+            <input 
+              type="text" 
+              class="form-control"
+              [(ngModel)]="workshopForm.name"
+              name="name"
+              required
+              placeholder="Ej: Taller AutoFix">
+          </div>
+
+          <div class="form-group">
+            <label>Dirección *</label>
+            <input 
+              type="text" 
+              class="form-control"
+              [(ngModel)]="workshopForm.address"
+              name="address"
+              required
+              readonly
+              placeholder="Selecciona en el mapa">
+            <small class="hint">💡 Haz clic en el mapa para seleccionar la ubicación exacta</small>
+          </div>
+
+          <!-- Google Maps Picker -->
+          <div class="form-group">
+            <app-map-picker
+              [initialLat]="workshopForm.latitude || 19.432608"
+              [initialLng]="workshopForm.longitude || -99.133209"
+              (locationSelected)="onLocationSelected($event)">
+            </app-map-picker>
+          </div>
+
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input 
+              type="tel" 
+              class="form-control"
+              [(ngModel)]="workshopForm.phone"
+              name="phone"
+              placeholder="5551234567">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Latitud (Auto-capturada)</label>
+              <input 
+                type="text"
+                class="form-control"
+                [(ngModel)]="workshopForm.latitude"
+                name="latitude"
+                readonly
+                placeholder="Se captura del mapa">
+            </div>
+
+            <div class="form-group">
+              <label>Longitud (Auto-capturada)</label>
+              <input 
+                type="text"
+                class="form-control"
+                [(ngModel)]="workshopForm.longitude"
+                name="longitude"
+                readonly
+                placeholder="Se captura del mapa">
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">💾 Guardar Información</button>
+            <button type="button" class="btn-secondary" *ngIf="workshop" (click)="navigateTo('dashboard')">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- VIEW: Add Technician -->
+    <div class="view-container" *ngIf="!loading && currentView === 'add-technician'">
+      <div class="form-card">
+        <div class="alert alert-info" *ngIf="!workshop">
+          ⚠️ Primero debes configurar la información de tu taller
+          <button class="btn-link" (click)="navigateTo('edit-info')">Ir a configurar</button>
+        </div>
+
+        <form (ngSubmit)="addTechnician()" *ngIf="workshop">
+          <div class="form-group">
+            <label>Nombre del Mecánico *</label>
+            <input 
+              type="text" 
+              class="form-control"
+              [(ngModel)]="technicianForm.name"
+              name="techName"
+              required
+              placeholder="Ej: Juan Pérez">
+          </div>
+
+          <div class="form-group">
+            <label>Teléfono</label>
+            <input 
+              type="tel" 
+              class="form-control"
+              [(ngModel)]="technicianForm.phone"
+              name="techPhone"
+              placeholder="5551234567 (opcional)">
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">➕ Agregar Mecánico</button>
+            <button type="button" class="btn-secondary" (click)="navigateTo('dashboard')">
+              Volver al Dashboard
+            </button>
+          </div>
+        </form>
+
+        <!-- Technicians List -->
+        <div class="technicians-list-section" *ngIf="technicians.length > 0">
+          <h3>Mecánicos Registrados ({{ technicians.length }})</h3>
+          <div class="tech-grid">
+            <div class="tech-card" *ngFor="let tech of technicians">
+              <div class="tech-avatar">👨‍🔧</div>
+              <div class="tech-info">
+                <h4>{{ tech.name }}</h4>
+                <p *ngIf="tech.phone">📱 {{ tech.phone }}</p>
+                <span class="tech-status" [class.available]="tech.is_available">
+                  {{ tech.is_available ? '✓ Disponible' : '⏳ Ocupado' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: Available Incidents -->
+    <div class="view-container" *ngIf="!loading && currentView === 'incidents-available'">
+      <div class="incidents-grid" *ngIf="availableIncidents.length > 0">
+        <div class="incident-card-large" *ngFor="let incident of availableIncidents">
+          <div class="incident-header">
+            <span class="badge" [ngClass]="getStatusClass(incident.status)">
+              {{ getStatusText(incident.status) }}
+            </span>
+            <span [ngClass]="getPriorityClass(incident.priority)">
+              {{ getPriorityText(incident.priority) }}
+            </span>
+          </div>
+
+          <h3>{{ incident.description }}</h3>
+
+          <div class="incident-details">
+            <p *ngIf="incident.location_text"><strong>📍 Ubicación:</strong> {{ incident.location_text }}</p>
+            <p *ngIf="incident.vehicle"><strong>🚗 Vehículo:</strong> {{ incident.vehicle.brand }} {{ incident.vehicle.model }}</p>
+            <p *ngIf="incident.user"><strong>👤 Cliente:</strong> {{ incident.user.full_name }}</p>
+            <p *ngIf="incident.classification"><strong>🏷️ Tipo:</strong> {{ incident.classification }}</p>
+          </div>
+
+          <div class="ai-summary" *ngIf="incident.ai_summary">
+            <strong>🤖 Análisis IA:</strong>
+            <p>{{ incident.ai_summary }}</p>
+          </div>
+
+          <div class="incident-actions">
+            <button 
+              class="btn-success" 
+              (click)="acceptIncident(incident)"
+              [disabled]="technicians.length === 0">
+              ✅ Aceptar Emergencia
+            </button>
+            <button class="btn-danger" (click)="rejectIncident(incident)">
+              ❌ Rechazar
+            </button>
+          </div>
+
+          <p class="warning-text" *ngIf="technicians.length === 0">
+            ⚠️ Agrega al menos un mecánico para aceptar emergencias
+          </p>
+        </div>
+      </div>
+
+      <div class="empty-state" *ngIf="availableIncidents.length === 0">
+        <div class="empty-icon">📭</div>
+        <h3>No hay emergencias disponibles</h3>
+        <p>Actualmente no hay emergencias en tu área que puedas atender</p>
+      </div>
+    </div>
+
+    <!-- VIEW: Incidents History -->
+    <div class="view-container" *ngIf="!loading && currentView === 'incidents-history'">
+      <div class="history-table" *ngIf="incidentHistory.length > 0">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Descripción</th>
+              <th>Cliente</th>
+              <th>Mecánico</th>
+              <th>Estado</th>
+              <th>Prioridad</th>
+              <th>Fecha Creación</th>
+              <th>Fecha Completada</th>
+              <th>Ganancia</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let incident of incidentHistory">
+              <td>#{{ incident.id }}</td>
+              <td>{{ incident.description }}</td>
+              <td>{{ incident.user?.full_name }}</td>
+              <td>{{ incident.technician?.name || '-' }}</td>
+              <td>
+                <span class="badge" [ngClass]="getStatusClass(incident.status)">
+                  {{ getStatusText(incident.status) }}
+                </span>
+              </td>
+              <td>
+                <span [ngClass]="getPriorityClass(incident.priority)">
+                  {{ getPriorityText(incident.priority) }}
+                </span>
+              </td>
+              <td>{{ incident.created_at | date:'short' }}</td>
+              <td>{{ incident.completed_at | date:'short' }}</td>
+              <td class="amount">\${{ incident.payment?.workshop_earnings?.toFixed(2) || '0.00' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" *ngIf="incidentHistory.length === 0">
+        <div class="empty-icon">📜</div>
+        <h3>No hay historial</h3>
+        <p>Aún no has completado ninguna emergencia</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL: Accept Incident -->
+  <div class="modal-overlay" *ngIf="showAcceptModal" (click)="cancelAcceptIncident()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>✅ Aceptar Emergencia</h2>
+        <button class="modal-close" (click)="cancelAcceptIncident()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="incident-summary" *ngIf="selectedIncident">
+          <h3>{{ selectedIncident.description }}</h3>
+          <div class="summary-details">
+            <p *ngIf="selectedIncident.vehicle">
+              <strong>🚗 Vehículo:</strong> {{ selectedIncident.vehicle.brand }} {{ selectedIncident.vehicle.model }}
+            </p>
+            <p *ngIf="selectedIncident.location_text">
+              <strong>📍 Ubicación:</strong> {{ selectedIncident.location_text }}
+            </p>
+            <p>
+              <strong>🏷️ Prioridad:</strong>
+              <span [ngClass]="getPriorityClass(selectedIncident.priority)">
+                {{ getPriorityText(selectedIncident.priority) }}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <form class="accept-form">
+          <div class="form-group">
+            <label>👨‍🔧 Asignar Mecánico *</label>
+            <select 
+              class="form-control"
+              [(ngModel)]="acceptForm.technician_id"
+              name="technician"
+              required>
+              <option [value]="undefined" disabled>Selecciona un mecánico</option>
+              <option 
+                *ngFor="let tech of technicians" 
+                [value]="tech.id"
+                [disabled]="!tech.is_available">
+                {{ tech.name }} {{ tech.is_available ? '✓' : '(Ocupado)' }}
+              </option>
+            </select>
+            <small class="hint">Solo mecánicos disponibles pueden ser asignados</small>
+          </div>
+
+          <div class="form-group">
+            <label>💰 Tarifa Estimada del Servicio *</label>
+            <input 
+              type="number" 
+              step="0.01"
+              min="0"
+              class="form-control"
+              [(ngModel)]="acceptForm.estimated_amount"
+              name="amount"
+              required
+              placeholder="Ej: 500.00">
+            <small class="hint">
+              <strong>Comisión taller ({{ (workshop?.commission_rate || 0.10) * 100 }}%):</strong> 
+              ${{ ((acceptForm.estimated_amount || 0) * (workshop?.commission_rate || 0.10)).toFixed(2) }}
+              &nbsp;|&nbsp;
+              <strong>Ganancia mecánico ({{ (1 - (workshop?.commission_rate || 0.10)) * 100 }}%):</strong> 
+              ${{ ((acceptForm.estimated_amount || 0) * (1 - (workshop?.commission_rate || 0.10))).toFixed(2) }}
+            </small>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" (click)="cancelAcceptIncident()">
+          Cancelar
+        </button>
+        <button 
+          type="button" 
+          class="btn-success" 
+          (click)="confirmAcceptIncident()"
+          [disabled]="!acceptForm.technician_id || !acceptForm.estimated_amount || (acceptForm.estimated_amount || 0) <= 0">
+          ✅ Confirmar y Aceptar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

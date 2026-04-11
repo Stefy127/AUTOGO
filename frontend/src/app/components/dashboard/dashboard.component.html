@@ -1,0 +1,123 @@
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar" [class.closed]="!sidebarOpen">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🚗</span>
+        <span class="logo-text" *ngIf="sidebarOpen">AutoGo</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Dashboard</span>
+      </a>
+      <a class="nav-item" *ngIf="isWorkshop() || isAdmin()">
+        <span class="nav-icon">🚨</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Emergencias</span>
+      </a>
+      <a class="nav-item" *ngIf="isClient()">
+        <span class="nav-icon">🚗</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Mis Vehículos</span>
+      </a>
+      <a class="nav-item" *ngIf="isClient()">
+        <span class="nav-icon">📱</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Mis Emergencias</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-profile" *ngIf="currentUser">
+        <div class="user-avatar">{{ currentUser.full_name.charAt(0).toUpperCase() }}</div>
+        <div class="user-info" *ngIf="sidebarOpen">
+          <div class="user-name">{{ currentUser.full_name }}</div>
+          <div class="user-role">{{ currentUser.role === 'workshop' ? 'Taller' : currentUser.role === 'client' ? 'Cliente' : 'Admin' }}</div>
+        </div>
+      </div>
+      <button class="btn-logout" (click)="logout()" [title]="sidebarOpen ? '' : 'Cerrar Sesión'">
+        <span class="logout-icon">🚪</span>
+        <span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesión</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content" [class.expanded]="!sidebarOpen">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <button class="btn-toggle" (click)="toggleSidebar()">☰</button>
+      <h1 class="page-title">Panel de Control</h1>
+      <div class="spacer"></div>
+    </header>
+
+    <div class="content-area">
+      <!-- Welcome Section -->
+      <div class="welcome-banner">
+        <h2>¡Bienvenido, {{ currentUser?.full_name }}!</h2>
+        <p *ngIf="isWorkshop()">Gestiona las emergencias vehiculares de tus clientes</p>
+        <p *ngIf="isClient()">Administra tus vehículos y solicitudes de emergencia</p>
+        <p *ngIf="isAdmin()">Panel de administración del sistema</p>
+      </div>
+
+      <!-- KPIs Section -->
+      <div class="kpis-section">
+        <h3 class="section-title">Estadísticas en Tiempo Real</h3>
+        <div class="kpis-grid">
+          <!-- Total Emergencias -->
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              📋
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">Total Emergencias</div>
+              <div class="kpi-value">{{ stats.total }}</div>
+            </div>
+          </div>
+
+          <!-- Pendientes -->
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+              ⏳
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">Pendientes</div>
+              <div class="kpi-value">{{ stats.pending }}</div>
+            </div>
+          </div>
+
+          <!-- En Proceso -->
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+              🔧
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">En Proceso</div>
+              <div class="kpi-value">{{ stats.inProgress }}</div>
+            </div>
+          </div>
+
+          <!-- Resueltas -->
+          <div class="kpi-card">
+            <div class="kpi-icon" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+              ✅
+            </div>
+            <div class="kpi-content">
+              <div class="kpi-label">Resueltas</div>
+              <div class="kpi-value">{{ stats.resolved }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Incidents List -->
+      <div class="incidents-section">
+        <h3 class="section-title">
+          <span *ngIf="isWorkshop() || isAdmin()">Todas las Emergencias</span>
+          <span *ngIf="isClient()">Mis Emergencias</span>
+        </h3>
+        <app-incident-list></app-incident-list>
+      </div>
+    </div>
+  </main>
+</div>

@@ -1,0 +1,147 @@
+  <div class="incidents-section">
+  <div class="section-header">
+    <h2>Emergencias Recientes</h2>
+    <div class="filter-buttons">
+      <button 
+        class="filter-btn" 
+        [class.active]="selectedStatus === ''"
+        (click)="filterByStatus('')">
+        Todas
+      </button>
+      <button 
+        class="filter-btn" 
+        [class.active]="selectedStatus === 'pending'"
+        (click)="filterByStatus('pending')">
+        Pendientes
+      </button>
+      <button 
+        class="filter-btn" 
+        [class.active]="selectedStatus === 'accepted'"
+        (click)="filterByStatus('accepted')">
+        Aceptadas
+      </button>
+      <button 
+        class="filter-btn" 
+        [class.active]="selectedStatus === 'in_progress'"
+        (click)="filterByStatus('in_progress')">
+        En Proceso
+      </button>
+      <button 
+        class="filter-btn" 
+        [class.active]="selectedStatus === 'completed'"
+        (click)="filterByStatus('completed')">
+        Completadas
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="loading">
+    <p>Cargando emergencias...</p>
+  </div>
+
+  <div *ngIf="error" class="error-message">
+    {{ error }}
+  </div>
+
+  <div *ngIf="!loading && incidents.length === 0" class="empty-state">
+    <div class="empty-icon">📭</div>
+    <p>No hay emergencias registradas</p>
+  </div>
+
+  <div class="incidents-grid" *ngIf="!loading && incidents.length > 0">
+    <div class="incident-card" *ngFor="let incident of incidents">
+      <div class="incident-header">
+        <div class="status-badges">
+          <span class="badge" [ngClass]="getStatusClass(incident.status)">
+            {{ getStatusText(incident.status) }}
+          </span>
+          <span class="badge priority-badge" [ngClass]="getPriorityClass(incident.priority)">
+            {{ getPriorityText(incident.priority) }}
+          </span>
+        </div>
+        <span class="incident-time">{{ incident.created_at | date: 'short' }}</span>
+      </div>
+
+      <div class="incident-body">
+        <h3>{{ incident.description }}</h3>
+        
+        <!-- AI Summary -->
+        <div class="ai-summary" *ngIf="incident.ai_summary">
+          <span class="ai-icon">🤖</span>
+          <p>{{ incident.ai_summary }}</p>
+        </div>
+
+        <!-- Classification -->
+        <div class="classification" *ngIf="incident.classification">
+          <span class="classification-badge">{{ incident.classification }}</span>
+        </div>
+        
+        <div class="incident-details">
+          <div class="detail-item">
+            <span class="detail-label">👤 Cliente:</span>
+            <span>{{ incident.user?.full_name || 'N/A' }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">🚗 Vehículo:</span>
+            <span>{{ incident.vehicle?.brand }} {{ incident.vehicle?.model }} - {{ incident.vehicle?.plate }}</span>
+          </div>
+          <div class="detail-item" *ngIf="incident.location_text">
+            <span class="detail-label">📍 Ubicación:</span>
+            <span>{{ incident.location_text }}</span>
+          </div>
+          <div class="detail-item" *ngIf="incident.workshop">
+            <span class="detail-label">🏢 Taller:</span>
+            <span>{{ incident.workshop.name }}</span>
+          </div>
+          <div class="detail-item" *ngIf="incident.technician">
+            <span class="detail-label">🔧 Técnico:</span>
+            <span>{{ incident.technician.name }}</span>
+          </div>
+          <div class="detail-item" *ngIf="incident.estimated_arrival_time">
+            <span class="detail-label">⏱️ Tiempo estimado:</span>
+            <span>{{ incident.estimated_arrival_time }} min</span>
+          </div>
+        </div>
+
+        <!-- Timestamps -->
+        <div class="timeline" *ngIf="incident.accepted_at || incident.started_at || incident.completed_at">
+          <div class="timeline-item" *ngIf="incident.accepted_at">
+            <span>✓ Aceptado: {{ incident.accepted_at | date: 'short' }}</span>
+          </div>
+          <div class="timeline-item" *ngIf="incident.started_at">
+            <span>▶ Iniciado: {{ incident.started_at | date: 'short' }}</span>
+          </div>
+          <div class="timeline-item" *ngIf="incident.completed_at">
+            <span>✅ Completado: {{ incident.completed_at | date: 'short' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="incident-actions">
+        <button 
+          class="action-btn btn-progress" 
+          *ngIf="incident.status === 'accepted'"
+          (click)="updateStatus(incident, 'in_progress')">
+          Iniciar Servicio
+        </button>
+        <button 
+          class="action-btn btn-success" 
+          *ngIf="incident.status === 'in_progress'"
+          (click)="updateStatus(incident, 'completed')">
+          Completar
+        </button>
+        <button 
+          class="action-btn btn-view" 
+          (click)="viewDetails(incident)">
+          Ver Detalles
+        </button>
+        <button 
+          class="action-btn btn-cancel" 
+          *ngIf="incident.status === 'pending' && isClient()"
+          (click)="cancelIncident(incident)">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

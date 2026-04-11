@@ -1,0 +1,295 @@
+class User {
+  final int id;
+  final String email;
+  final String fullName;
+  final String? phone;
+  final String role;
+
+  User({
+    required this.id,
+    required this.email,
+    required this.fullName,
+    this.phone,
+    required this.role,
+  });
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'],
+      email: json['email'],
+      fullName: json['full_name'],
+      phone: json['phone'],
+      role: json['role'],
+    );
+  }
+}
+
+class Vehicle {
+  final int? id;
+  final String brand;
+  final String model;
+  final int year;
+  final String plate;
+  final String? color;
+
+  Vehicle({
+    this.id,
+    required this.brand,
+    required this.model,
+    required this.year,
+    required this.plate,
+    this.color,
+  });
+
+  factory Vehicle.fromJson(Map<String, dynamic> json) {
+    return Vehicle(
+      id: json['id'],
+      brand: json['brand'],
+      model: json['model'],
+      year: json['year'],
+      plate: json['plate'],
+      color: json['color'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'brand': brand,
+      'model': model,
+      'year': year,
+      'plate': plate,
+      'color': color,
+    };
+  }
+}
+
+class Workshop {
+  final int id;
+  final String name;
+  final String? address;
+  final double? latitude;
+  final double? longitude;
+  final String? phone;
+  final bool isActive;
+  final double commissionRate;
+
+  Workshop({
+    required this.id,
+    required this.name,
+    this.address,
+    this.latitude,
+    this.longitude,
+    this.phone,
+    required this.isActive,
+    required this.commissionRate,
+  });
+
+  factory Workshop.fromJson(Map<String, dynamic> json) {
+    return Workshop(
+      id: json['id'],
+      name: json['name'],
+      address: json['address'],
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
+      phone: json['phone'],
+      isActive: json['is_active'],
+      commissionRate: json['commission_rate']?.toDouble() ?? 0.1,
+    );
+  }
+}
+
+class Technician {
+  final int id;
+  final String name;
+  final String? phone;
+  final bool isAvailable;
+  final double? currentLatitude;
+  final double? currentLongitude;
+  final int workshopId;
+
+  Technician({
+    required this.id,
+    required this.name,
+    this.phone,
+    required this.isAvailable,
+    this.currentLatitude,
+    this.currentLongitude,
+    required this.workshopId,
+  });
+
+  factory Technician.fromJson(Map<String, dynamic> json) {
+    return Technician(
+      id: json['id'],
+      name: json['name'],
+      phone: json['phone'],
+      isAvailable: json['is_available'],
+      currentLatitude: json['current_latitude']?.toDouble(),
+      currentLongitude: json['current_longitude']?.toDouble(),
+      workshopId: json['workshop_id'],
+    );
+  }
+}
+
+class Payment {
+  final int id;
+  final int incidentId;
+  final double amount;
+  final double commissionRate;
+  final double commissionAmount;
+  final double workshopAmount;
+  final String paymentMethod;
+  final String status;
+  final DateTime? paidAt;
+  final DateTime createdAt;
+
+  Payment({
+    required this.id,
+    required this.incidentId,
+    required this.amount,
+    required this.commissionRate,
+    required this.commissionAmount,
+    required this.workshopAmount,
+    required this.paymentMethod,
+    required this.status,
+    this.paidAt,
+    required this.createdAt,
+  });
+
+  factory Payment.fromJson(Map<String, dynamic> json) {
+    return Payment(
+      id: json['id'],
+      incidentId: json['incident_id'],
+      amount: json['amount']?.toDouble() ?? 0,
+      commissionRate: json['commission_percentage']?.toDouble() ?? 0,
+      commissionAmount: json['commission_amount']?.toDouble() ?? 0,
+      workshopAmount: json['workshop_earnings']?.toDouble() ?? 0,
+      paymentMethod: json['payment_method'],
+      status: json['is_paid'] == true ? 'paid' : 'pending',
+      paidAt: json['paid_at'] != null ? DateTime.parse(json['paid_at']) : null,
+      createdAt: DateTime.parse(json['created_at']),
+    );
+  }
+}
+
+class IncidentHistory {
+  final int id;
+  final int incidentId;
+  final String status;
+  final String? note;
+  final DateTime timestamp;
+
+  IncidentHistory({
+    required this.id,
+    required this.incidentId,
+    required this.status,
+    this.note,
+    required this.timestamp,
+  });
+
+  factory IncidentHistory.fromJson(Map<String, dynamic> json) {
+    return IncidentHistory(
+      id: json['id'],
+      incidentId: json['incident_id'],
+      status: json['status'],
+      note: json['note'],
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+}
+
+class Incident {
+  final int? id;
+  final String description;
+  final String status;
+  final double? latitude;
+  final double? longitude;
+  final String? locationText;
+  final int? vehicleId;
+  final User? user;
+  final Vehicle? vehicle;
+  final DateTime? createdAt;
+  // CICLO 2 fields
+  final String priority;
+  final String? classification;
+  final String? aiSummary;
+  final int? workshopId;
+  final int? technicianId;
+  final Workshop? workshop;
+  final Technician? technician;
+  final DateTime? estimatedArrivalTime;
+  final DateTime? acceptedAt;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+  final String? photoUrl;
+  final Payment? payment;
+
+  Incident({
+    this.id,
+    required this.description,
+    this.status = 'pending',
+    this.latitude,
+    this.longitude,
+    this.locationText,
+    this.vehicleId,
+    this.user,
+    this.vehicle,
+    this.createdAt,
+    this.priority = 'medium',
+    this.classification,
+    this.aiSummary,
+    this.workshopId,
+    this.technicianId,
+    this.workshop,
+    this.technician,
+    this.estimatedArrivalTime,
+    this.acceptedAt,
+    this.startedAt,
+    this.completedAt,
+    this.photoUrl,
+    this.payment,
+  });
+
+  factory Incident.fromJson(Map<String, dynamic> json) {
+    return Incident(
+      id: json['id'],
+      description: json['description'],
+      status: json['status'],
+      latitude: json['latitude']?.toDouble(),
+      longitude: json['longitude']?.toDouble(),
+      locationText: json['location_text'],
+      vehicleId: json['vehicle_id'],
+      user: json['user'] != null ? User.fromJson(json['user']) : null,
+      vehicle: json['vehicle'] != null ? Vehicle.fromJson(json['vehicle']) : null,
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      priority: json['priority'] ?? 'medium',
+      classification: json['classification'],
+      aiSummary: json['ai_summary'],
+      workshopId: json['workshop_id'],
+      technicianId: json['technician_id'],
+      workshop: json['workshop'] != null ? Workshop.fromJson(json['workshop']) : null,
+      technician: json['technician'] != null ? Technician.fromJson(json['technician']) : null,
+        estimatedArrivalTime: json['estimated_arrival_time'] != null
+          ? (json['estimated_arrival_time'] is int
+            ? DateTime.now().add(Duration(minutes: json['estimated_arrival_time']))
+            : DateTime.parse(json['estimated_arrival_time'].toString()))
+          : null,
+      acceptedAt: json['accepted_at'] != null ? DateTime.parse(json['accepted_at']) : null,
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
+      completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']) : null,
+      photoUrl: json['photo_url'],
+      payment: json['payment'] != null ? Payment.fromJson(json['payment']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'description': description,
+      'vehicle_id': vehicleId,
+      'latitude': latitude,
+      'longitude': longitude,
+      'location_text': locationText,
+      'priority': priority,
+      'photo_url': photoUrl,
+    };
+  }
+}

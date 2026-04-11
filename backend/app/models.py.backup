@@ -1,0 +1,74 @@
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text, Float
+from sqlalchemy.orm import relationship
+from datetime import datetime
+import enum
+from app.database import Base
+
+
+class UserRole(str, enum.Enum):
+    CLIENT = "client"
+    WORKSHOP = "workshop"
+    ADMIN = "admin"
+
+
+class IncidentStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CANCELLED = "cancelled"
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=False)
+    phone = Column(String, nullable=True)
+    role = Column(Enum(UserRole), default=UserRole.CLIENT, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    vehicles = relationship("Vehicle", back_populates="owner", cascade="all, delete-orphan")
+    incidents = relationship("Incident", back_populates="user", cascade="all, delete-orphan")
+
+
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    brand = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    plate = Column(String, unique=True, index=True, nullable=False)
+    color = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    owner = relationship("User", back_populates="vehicles")
+    incidents = relationship("Incident", back_populates="vehicle", cascade="all, delete-orphan")
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(Enum(IncidentStatus), default=IncidentStatus.PENDING, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    location_text = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    audio_url = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="incidents")
+    vehicle = relationship("Vehicle", back_populates="incidents")

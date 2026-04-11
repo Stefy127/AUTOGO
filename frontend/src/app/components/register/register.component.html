@@ -1,0 +1,140 @@
+<div class="register-container">
+  <div class="register-card">
+    <div class="logo-section">
+      <div class="logo">�</div>
+      <h1>Registro de Taller</h1>
+      <p>Únete a la plataforma AutoGo</p>
+    </div>
+
+    <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
+      <div class="form-group">
+        <label for="workshopName">Nombre del Taller *</label>
+        <input 
+          type="text" 
+          id="workshopName" 
+          formControlName="workshopName" 
+          placeholder="Ej: Taller AutoFix"
+          [class.error]="registerForm.get('workshopName')?.invalid && registerForm.get('workshopName')?.touched"
+        >
+        <div class="error-message" *ngIf="registerForm.get('workshopName')?.invalid && registerForm.get('workshopName')?.touched">
+          El nombre del taller es requerido
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="fullName">Nombre del Propietario *</label>
+        <input 
+          type="text" 
+          id="fullName" 
+          formControlName="fullName" 
+          placeholder="Ej: Juan Pérez"
+          [class.error]="registerForm.get('fullName')?.invalid && registerForm.get('fullName')?.touched"
+        >
+        <div class="error-message" *ngIf="registerForm.get('fullName')?.invalid && registerForm.get('fullName')?.touched">
+          El nombre del propietario es requerido
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Correo Electrónico *</label>
+        <input 
+          type="email" 
+          id="email" 
+          formControlName="email" 
+          placeholder="correo@ejemplo.com"
+          [class.error]="registerForm.get('email')?.invalid && registerForm.get('email')?.touched"
+        >
+        <div class="error-message" *ngIf="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
+          Ingresa un correo válido
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="phone">Teléfono de Contacto *</label>
+        <input 
+          type="tel" 
+          id="phone" 
+          formControlName="phone" 
+          placeholder="5551234567"
+          [class.error]="registerForm.get('phone')?.invalid && registerForm.get('phone')?.touched"
+        >
+        <div class="error-message" *ngIf="registerForm.get('phone')?.invalid && registerForm.get('phone')?.touched">
+          El teléfono es requerido
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="address">Dirección del Taller *</label>
+        <input 
+          type="text" 
+          id="address" 
+          formControlName="address" 
+          placeholder="Selecciona en el mapa para obtener la dirección"
+          readonly
+          [class.error]="registerForm.get('address')?.invalid && registerForm.get('address')?.touched"
+        >
+        <div class="error-message" *ngIf="registerForm.get('address')?.invalid && registerForm.get('address')?.touched">
+          Selecciona una ubicación en el mapa
+        </div>
+      </div>
+
+      <!-- Google Maps Picker -->
+      <div class="form-group">
+        <app-map-picker
+          [initialLat]="registerForm.value.latitude || 19.432608"
+          [initialLng]="registerForm.value.longitude || -99.133209"
+          (locationSelected)="onLocationSelected($event)">
+        </app-map-picker>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Latitud (Auto-capturada)</label>
+          <input 
+            type="text" 
+            formControlName="latitude" 
+            readonly
+            placeholder="Se captura del mapa"
+            class="readonly-input">
+        </div>
+
+        <div class="form-group">
+          <label>Longitud (Auto-capturada)</label>
+          <input 
+            type="text" 
+            formControlName="longitude" 
+            readonly
+            placeholder="Se captura del mapa"
+            class="readonly-input">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Contraseña *</label>
+        <input 
+          type="password" 
+          id="password" 
+          formControlName="password" 
+          placeholder="Mínimo 6 caracteres"
+          [class.error]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched"
+        >
+        <div class="error-message" *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
+          Mínimo 6 caracteres
+        </div>
+      </div>
+
+      <div class="error-alert" *ngIf="error">
+        {{ error }}
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" [disabled]="loading">
+        <span *ngIf="!loading">🔧 Registrar Taller</span>
+        <span *ngIf="loading">Creando cuenta...</span>
+      </button>
+    </form>
+
+    <div class="login-link">
+      <p>¿Ya tienes cuenta? <a routerLink="/login">Inicia sesión</a></p>
+    </div>
+  </div>
+</div>

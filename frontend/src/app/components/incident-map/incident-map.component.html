@@ -1,0 +1,16 @@
+<div class="map-container">
+  <div id="incident-map" [style.height]="height"></div>
+  <div class="map-info" *ngIf="incident">
+    <div class="info-card">
+      <h4>Incidente #{{ incident.id }}</h4>
+      <p><strong>Estado:</strong> {{ incident.status }}</p>
+      <p><strong>Prioridad:</strong> {{ incident.priority || 'MEDIUM' }}</p>
+      <p *ngIf="incident.location_text"><strong>Ubicación:</strong> {{ incident.location_text }}</p>
+      <p *ngIf="incident.workshop"><strong>Taller:</strong> {{ incident.workshop.name }}</p>
+      <p *ngIf="incident.technician"><strong>Técnico:</strong> {{ incident.technician.name }}</p>
+      <p *ngIf="incident.estimated_arrival_time">
+        <strong>Tiempo estimado:</strong> {{ incident.estimated_arrival_time }} min
+      </p>
+    </div>
+  </div>
+</div>

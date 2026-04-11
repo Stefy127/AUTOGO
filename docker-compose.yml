@@ -1,0 +1,65 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: autogo_postgres
+    environment:
+      POSTGRES_USER: autogo
+      POSTGRES_PASSWORD: autogo123
+      POSTGRES_DB: autogo_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autogo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autogo_network
+
+  # Backend API (FastAPI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: autogo_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://autogo:autogo123@postgres:5432/autogo_db
+      SECRET_KEY: 09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - autogo_network
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # Frontend Web (Angular)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: autogo_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - autogo_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  autogo_network:
+    driver: bridge
