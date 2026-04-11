@@ -27,7 +27,7 @@
   - [x] CICLO2_IMPLEMENTATION_GUIDE.md (guía detallada)
   - [x] CICLO2_SUMMARY.md (resumen ejecutivo)
   - [x] QUICK_REFERENCE.md (referencia rápida)
-  - [x] setup_ciclo2.sh (script de setup)
+  - [x] setup_ciclo2.sh (script de setup.)
 
 ---
 
