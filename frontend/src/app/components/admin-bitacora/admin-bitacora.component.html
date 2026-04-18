@@ -1,0 +1,95 @@
+<div class="dashboard-container">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🚗</span>
+        <span class="logo-text">AutoGo Admin</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item" routerLink="/dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">Dashboard</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/gestion-talleres">
+        <span class="nav-icon">🔧</span>
+        <span class="nav-text">Gestión Talleres</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/gestion-clientes">
+        <span class="nav-icon">👥</span>
+        <span class="nav-text">Gestión Clientes</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/alquiler-autos">
+        <span class="nav-icon">🚙</span>
+        <span class="nav-text">Alquiler de Autos</span>
+      </a>
+      <a class="nav-item active" routerLink="/admin/bitacora">
+        <span class="nav-icon">🧾</span>
+        <span class="nav-text">Bitácora</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout" (click)="logout()">🚪 Cerrar Sesión</button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="top-bar">
+      <h1>Bitácora del Sistema</h1>
+    </header>
+
+    <section class="content-area">
+      <div class="filters">
+        <input
+          type="text"
+          placeholder="Filtrar por tipo (auth, action, section_visit)"
+          [(ngModel)]="filterEventType"
+        />
+        <input
+          type="text"
+          placeholder="Filtrar por sección"
+          [(ngModel)]="filterSection"
+        />
+        <button (click)="loadLogs()">Aplicar filtros</button>
+        <button class="secondary" (click)="clearFilters()">Limpiar</button>
+      </div>
+
+      <div class="alert" *ngIf="error">{{ error }}</div>
+      <p *ngIf="loading">Cargando bitácora...</p>
+
+      <table *ngIf="!loading" class="table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th>Tipo</th>
+            <th>Acción</th>
+            <th>Sección</th>
+            <th>Método</th>
+            <th>Endpoint</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let log of logs">
+            <td>{{ log.created_at | date:'yyyy-MM-dd HH:mm:ss' }}</td>
+            <td>{{ log.user_full_name || log.user_email || 'N/A' }}</td>
+            <td>{{ log.user_role || 'N/A' }}</td>
+            <td>{{ log.event_type }}</td>
+            <td>{{ log.action }}</td>
+            <td>{{ log.section || '-' }}</td>
+            <td>{{ log.http_method || '-' }}</td>
+            <td>{{ log.endpoint || '-' }}</td>
+            <td>{{ log.details || '-' }}</td>
+          </tr>
+          <tr *ngIf="logs.length === 0">
+            <td colspan="9">No hay registros para mostrar.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>

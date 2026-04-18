@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
@@ -25,7 +26,8 @@ class AuthService with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login(String email, String password) async {
+  // Returns null on success, or an error message string on failure.
+  Future<String?> login(String email, String password) async {
     try {
       final response = await _apiService.post('/auth/login/json', {
         'email': email,
@@ -35,13 +37,22 @@ class AuthService with ChangeNotifier {
       _token = response['access_token'];
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', _token!);
-      
+
       await _loadUserProfile();
       notifyListeners();
-      return true;
+      return null;
+    } on TimeoutException {
+      return 'No se pudo conectar al servidor. Verifica tu conexión.';
     } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('401') || msg.contains('400')) {
+        return 'Email o contraseña incorrectos.';
+      }
+      if (msg.contains('SocketException') || msg.contains('Connection refused') || msg.contains('Failed host lookup')) {
+        return 'No se pudo conectar al servidor. Verifica tu conexión.';
+      }
       print('Login error: $e');
-      return false;
+      return 'Error al iniciar sesión. Intenta de nuevo.';
     }
   }
 
@@ -54,7 +65,7 @@ class AuthService with ChangeNotifier {
         'phone': phone,
         'role': 'client',
       });
-      return await login(email, password);
+      return await login(email, password) == null;
     } catch (e) {
       print('Register error: $e');
       return false;
@@ -77,5 +88,16 @@ class AuthService with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
     notifyListeners();
+  }
+
+  Future<bool> deleteMyAccount() async {
+    try {
+      await _apiService.delete('/users/me', token: _token);
+      await logout();
+      return true;
+    } catch (e) {
+      print('Delete account error: $e');
+      return false;
+    }
   }
 }

@@ -57,6 +57,18 @@ def login(
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
+
+    db.add(models.AuditLog(
+        user_id=user.id,
+        event_type="auth",
+        action="Inicio de sesión",
+        section="/login",
+        endpoint="/auth/login",
+        http_method="POST",
+        details="Inicio de sesión exitoso",
+    ))
+    db.commit()
+
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -77,4 +89,35 @@ def login_json(
     access_token = create_access_token(
         data={"sub": user.email}, expires_delta=access_token_expires
     )
+
+    db.add(models.AuditLog(
+        user_id=user.id,
+        event_type="auth",
+        action="Inicio de sesión",
+        section="/login",
+        endpoint="/auth/login/json",
+        http_method="POST",
+        details="Inicio de sesión exitoso (json)",
+    ))
+    db.commit()
+
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/logout")
+def logout(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_user)
+):
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        event_type="auth",
+        action="Cierre de sesión",
+        section="/logout",
+        endpoint="/auth/logout",
+        http_method="POST",
+        details="Cierre de sesión solicitado por el usuario",
+    ))
+    db.commit()
+
+    return {"message": "Sesión cerrada correctamente"}

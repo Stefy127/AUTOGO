@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import auth, users, vehicles, incidents, workshops, payments, admin
+from app.routers import auth, users, vehicles, incidents, workshops, payments, admin, rental_vehicles, audit_logs
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -29,6 +29,8 @@ app.include_router(incidents.router)
 app.include_router(workshops.router)
 app.include_router(payments.router)
 app.include_router(admin.router)
+app.include_router(rental_vehicles.router)
+app.include_router(audit_logs.router)
 
 
 @app.get("/")

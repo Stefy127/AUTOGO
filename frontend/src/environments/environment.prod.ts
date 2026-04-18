@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'http://backend:8000'
+  apiUrl: 'https://autogo-backend-150869484553.us-central1.run.app'
 };

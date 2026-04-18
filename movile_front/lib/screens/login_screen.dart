@@ -28,7 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     final authService = Provider.of<AuthService>(context, listen: false);
-    final success = await authService.login(
+    final error = await authService.login(
       _emailController.text.trim(),
       _passwordController.text,
     );
@@ -37,12 +37,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
 
-    if (success) {
+    if (error == null) {
       Navigator.pushReplacementNamed(context, '/home');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email o contraseña incorrectos'),
+        SnackBar(
+          content: Text(error),
           backgroundColor: Colors.red,
         ),
       );

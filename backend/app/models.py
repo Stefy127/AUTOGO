@@ -33,6 +33,11 @@ class PaymentMethod(str, enum.Enum):
     TRANSFER = "transfer"
 
 
+class VehicleType(str, enum.Enum):
+    AUTOMOVIL = "automovil"
+    CAMIONETA = "camioneta"
+
+
 # ==================== MODELS ====================
 
 class User(Base):
@@ -51,6 +56,24 @@ class User(Base):
     vehicles = relationship("Vehicle", back_populates="owner", cascade="all, delete-orphan")
     incidents = relationship("Incident", foreign_keys="Incident.user_id", back_populates="user", cascade="all, delete-orphan")
     owned_workshops = relationship("Workshop", back_populates="owner", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="user")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    action = Column(String, nullable=False)
+    section = Column(String, nullable=True, index=True)
+    endpoint = Column(String, nullable=True)
+    http_method = Column(String, nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationships
+    user = relationship("User", back_populates="audit_logs")
 
 
 class Workshop(Base):
@@ -108,6 +131,21 @@ class Vehicle(Base):
     # Relationships
     owner = relationship("User", back_populates="vehicles")
     incidents = relationship("Incident", back_populates="vehicle", cascade="all, delete-orphan")
+
+
+class RentalVehicle(Base):
+    __tablename__ = "rental_vehicles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_name = Column(String, nullable=False)
+    vehicle_type = Column(Enum(VehicleType), nullable=False)
+    vehicle_name = Column(String, nullable=False)
+    characteristics = Column(Text, nullable=False)
+    photo_url = Column(String, nullable=True)
+    whatsapp_number = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Incident(Base):
