@@ -47,6 +47,12 @@ export class AuthService {
   }
 
   logout(): void {
+    this.http.post(`${this.apiUrl}/auth/logout`, {}).subscribe({
+      error: () => {
+        // Intencionalmente silencioso.
+      }
+    });
+
     localStorage.removeItem('token');
     localStorage.removeItem('currentUser');
     this.currentUserSubject.next(null);
@@ -58,5 +64,9 @@ export class AuthService {
 
   getToken(): string | null {
     return localStorage.getItem('token');
+  }
+
+  deleteMyAccount(): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/users/me`);
   }
 }

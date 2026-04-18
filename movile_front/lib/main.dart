@@ -6,6 +6,7 @@ import 'screens/home_screen.dart';
 import 'screens/vehicle_form_screen.dart';
 import 'screens/emergency_form_screen.dart';
 import 'screens/emergency_list_screen.dart';
+import 'screens/rental_vehicles_list_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 
@@ -72,6 +73,7 @@ class MyApp extends StatelessWidget {
           '/vehicle-form': (context) => const VehicleFormScreen(),
           '/emergency-form': (context) => const EmergencyFormScreen(),
           '/emergency-list': (context) => const EmergencyListScreen(),
+          '/rental-vehicles': (context) => const RentalVehiclesListScreen(),
         },
       ),
     );

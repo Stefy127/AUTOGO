@@ -1,0 +1,85 @@
+<div class="dashboard-container">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🚗</span>
+        <span class="logo-text">AutoGo Admin</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item" routerLink="/dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text">Dashboard</span>
+      </a>
+      <a class="nav-item active" routerLink="/admin/gestion-talleres">
+        <span class="nav-icon">🔧</span>
+        <span class="nav-text">Gestión Talleres</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/gestion-clientes">
+        <span class="nav-icon">👥</span>
+        <span class="nav-text">Gestión Clientes</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/alquiler-autos">
+        <span class="nav-icon">🚙</span>
+        <span class="nav-text">Alquiler de Autos</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/bitacora">
+        <span class="nav-icon">🧾</span>
+        <span class="nav-text">Bitácora</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-logout" (click)="logout()">🚪 Cerrar Sesión</button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="top-bar">
+      <h1>Gestión Talleres</h1>
+    </header>
+
+    <section class="content-area">
+      <div class="alert" *ngIf="error">{{ error }}</div>
+      <p *ngIf="loading">Cargando talleres...</p>
+
+      <table *ngIf="!loading" class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Teléfono</th>
+            <th>Rol</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let user of users">
+            <td>{{ user.id }}</td>
+            <td>
+              <input *ngIf="editingUserId === user.id" [(ngModel)]="editForm.full_name" />
+              <span *ngIf="editingUserId !== user.id">{{ user.full_name }}</span>
+            </td>
+            <td>
+              <input *ngIf="editingUserId === user.id" [(ngModel)]="editForm.email" />
+              <span *ngIf="editingUserId !== user.id">{{ user.email }}</span>
+            </td>
+            <td>
+              <input *ngIf="editingUserId === user.id" [(ngModel)]="editForm.phone" />
+              <span *ngIf="editingUserId !== user.id">{{ user.phone || '-' }}</span>
+            </td>
+            <td>{{ user.role }}</td>
+            <td class="actions">
+              <button *ngIf="editingUserId !== user.id" (click)="startEdit(user)">Editar</button>
+              <button *ngIf="editingUserId === user.id" (click)="saveEdit(user.id)">Guardar</button>
+              <button *ngIf="editingUserId === user.id" (click)="cancelEdit()">Cancelar</button>
+              <button class="danger" (click)="deleteUser(user)">Eliminar</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+</div>

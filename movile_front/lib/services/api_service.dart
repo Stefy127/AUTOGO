@@ -2,10 +2,15 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Change this to your backend URL
-  // static const String baseUrl = 'http://10.0.2.2:8000'; // For Android Emulator
-  // static const String baseUrl = 'http://localhost:8000'; // For iOS Simulator
-  static const String baseUrl = 'http://192.168.110.17:8000'; // For physical device
+  // API URL configurable at runtime:
+  // flutter run --dart-define=API_BASE_URL=http://192.168.110.17:8000
+  // If not provided, defaults to Android emulator host bridge.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000',
+  );
+
+  static const _timeout = Duration(seconds: 15);
 
   Future<dynamic> get(String endpoint, {String? token}) async {
     final url = Uri.parse('$baseUrl$endpoint');
@@ -14,7 +19,7 @@ class ApiService {
       if (token != null) 'Authorization': 'Bearer $token',
     };
 
-    final response = await http.get(url, headers: headers);
+    final response = await http.get(url, headers: headers).timeout(_timeout);
     return _handleResponse(response);
   }
 
@@ -29,7 +34,7 @@ class ApiService {
       url,
       headers: headers,
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
     return _handleResponse(response);
   }
 
@@ -44,7 +49,18 @@ class ApiService {
       url,
       headers: headers,
       body: jsonEncode(data),
-    );
+    ).timeout(_timeout);
+    return _handleResponse(response);
+  }
+
+  Future<dynamic> delete(String endpoint, {String? token}) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+
+    final response = await http.delete(url, headers: headers).timeout(_timeout);
     return _handleResponse(response);
   }
 

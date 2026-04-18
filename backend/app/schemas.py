@@ -31,6 +31,11 @@ class PaymentMethod(str, Enum):
     TRANSFER = "transfer"
 
 
+class VehicleType(str, Enum):
+    AUTOMOVIL = "automovil"
+    CAMIONETA = "camioneta"
+
+
 # User Schemas
 class UserBase(BaseModel):
     email: EmailStr
@@ -57,6 +62,19 @@ class UserResponse(UserBase):
         from_attributes = True
 
 
+class UserSelfUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
+
+
+class AdminUserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[UserRole] = None
+
+
 # Vehicle Schemas
 class VehicleBase(BaseModel):
     brand: str
@@ -73,6 +91,40 @@ class VehicleCreate(VehicleBase):
 class VehicleResponse(VehicleBase):
     id: int
     user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Rental Vehicle Schemas
+class RentalVehicleBase(BaseModel):
+    company_name: str
+    vehicle_type: VehicleType
+    vehicle_name: str
+    characteristics: str
+    photo_url: Optional[str] = None
+    whatsapp_number: str
+
+
+class RentalVehicleCreate(RentalVehicleBase):
+    pass
+
+
+class RentalVehicleUpdate(BaseModel):
+    company_name: Optional[str] = None
+    vehicle_type: Optional[VehicleType] = None
+    vehicle_name: Optional[str] = None
+    characteristics: Optional[str] = None
+    photo_url: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class RentalVehicleResponse(RentalVehicleBase):
+    id: int
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 
@@ -268,6 +320,30 @@ class IncidentHistoryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AuditLogCreate(BaseModel):
+    event_type: str
+    action: str
+    section: Optional[str] = None
+    endpoint: Optional[str] = None
+    http_method: Optional[str] = None
+    details: Optional[str] = None
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    user_email: Optional[str] = None
+    user_full_name: Optional[str] = None
+    user_role: Optional[UserRole] = None
+    event_type: str
+    action: str
+    section: Optional[str] = None
+    endpoint: Optional[str] = None
+    http_method: Optional[str] = None
+    details: Optional[str] = None
+    created_at: datetime
 
 
 # Resolve forward refs declared in IncidentResponse

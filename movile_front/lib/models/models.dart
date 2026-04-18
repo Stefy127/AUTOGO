@@ -293,3 +293,44 @@ class Incident {
     };
   }
 }
+
+class RentalVehicle {
+  final int id;
+  final String companyName;
+  final String vehicleType; // 'automovil' or 'camioneta'
+  final String vehicleName;
+  final String characteristics;
+  final String? photoUrl;
+  final String whatsappNumber;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  RentalVehicle({
+    required this.id,
+    required this.companyName,
+    required this.vehicleType,
+    required this.vehicleName,
+    required this.characteristics,
+    this.photoUrl,
+    required this.whatsappNumber,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory RentalVehicle.fromJson(Map<String, dynamic> json) {
+    return RentalVehicle(
+      id: json['id'],
+      companyName: json['company_name'],
+      vehicleType: json['vehicle_type'],
+      vehicleName: json['vehicle_name'],
+      characteristics: json['characteristics'],
+      photoUrl: json['photo_url'],
+      whatsappNumber: json['whatsapp_number'],
+      isActive: json['is_active'],
+      createdAt: DateTime.parse(json['created_at']),
+      updatedAt: DateTime.parse(json['updated_at']),
+    );
+  }
+}

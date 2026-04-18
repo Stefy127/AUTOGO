@@ -10,7 +10,8 @@ from app.models import (
     UserRole, IncidentStatus, IncidentPriority
 )
 from app.schemas import (
-    WorkshopResponse, IncidentResponse, PaymentResponse, IncidentHistoryResponse
+    WorkshopResponse, IncidentResponse, PaymentResponse, IncidentHistoryResponse,
+    AdminUserUpdate
 )
 from app.auth import get_current_user
 
@@ -440,4 +441,55 @@ async def delete_user(
     return {
         "message": "Usuario eliminado exitosamente",
         "user_id": user_id
+    }
+
+
+@router.patch("/users/{user_id}")
+async def update_user(
+    user_id: int,
+    user_data: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Editar datos de un usuario.
+    Solo administradores.
+    """
+    verify_admin(current_user)
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
+
+    update_data = user_data.dict(exclude_unset=True)
+
+    if "email" in update_data:
+        existing = db.query(User).filter(User.email == update_data["email"], User.id != user_id).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El correo ya está en uso"
+            )
+
+    for field, value in update_data.items():
+        setattr(user, field, value)
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "message": "Usuario actualizado exitosamente",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "phone": user.phone,
+            "role": user.role,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        }
     }

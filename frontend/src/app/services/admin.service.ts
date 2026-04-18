@@ -3,12 +3,13 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { AuthService } from './auth.service';
 import { Workshop, Incident, IncidentHistory, Payment, User } from '../models/models';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AdminService {
-  private apiUrl = 'http://localhost:8000/admin';
+  private apiUrl = `${environment.apiUrl}/admin`;
 
   constructor(
     private http: HttpClient,
@@ -129,6 +130,14 @@ export class AdminService {
   deleteUser(userId: number): Observable<any> {
     return this.http.delete(
       `${this.apiUrl}/users/${userId}`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  updateUser(userId: number, payload: Partial<User>): Observable<any> {
+    return this.http.patch(
+      `${this.apiUrl}/users/${userId}`,
+      payload,
       { headers: this.getHeaders() }
     );
   }

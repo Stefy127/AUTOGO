@@ -414,4 +414,19 @@ export class WorkshopDashboardComponent implements OnInit {
     this.authService.logout();
     this.router.navigate(['/login']);
   }
+
+  deleteMyAccount(): void {
+    const ok = confirm('¿Seguro que deseas eliminar tu cuenta? Esta acción no se puede deshacer.');
+    if (!ok) return;
+
+    this.authService.deleteMyAccount().subscribe({
+      next: () => {
+        this.authService.logout();
+        this.router.navigate(['/login']);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo eliminar la cuenta';
+      }
+    });
+  }
 }

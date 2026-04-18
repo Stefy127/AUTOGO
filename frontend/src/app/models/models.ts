@@ -130,3 +130,18 @@ export interface RegisterRequest {
   phone?: string;
   role: 'client' | 'workshop' | 'admin';
 }
+
+export interface AuditLog {
+  id: number;
+  user_id?: number;
+  user_email?: string;
+  user_full_name?: string;
+  user_role?: 'client' | 'workshop' | 'technician' | 'admin';
+  event_type: string;
+  action: string;
+  section?: string;
+  endpoint?: string;
+  http_method?: string;
+  details?: string;
+  created_at: string;
+}

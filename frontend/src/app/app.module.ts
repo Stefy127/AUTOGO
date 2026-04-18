@@ -13,7 +13,12 @@ import { IncidentListComponent } from './components/incident-list/incident-list.
 import { IncidentMapComponent } from './components/incident-map/incident-map.component';
 import { WorkshopDashboardComponent } from './components/workshop-dashboard/workshop-dashboard.component';
 import { MapPickerComponent } from './components/map-picker/map-picker.component';
+import { AdminWorkshopManagementComponent } from './components/admin-workshop-management/admin-workshop-management.component';
+import { AdminClientManagementComponent } from './components/admin-client-management/admin-client-management.component';
+import { AdminRentalManagementComponent } from './components/admin-rental-management/admin-rental-management.component';
+import { AdminBitacoraComponent } from './components/admin-bitacora/admin-bitacora.component';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
+import { AuditInterceptor } from './interceptors/audit.interceptor';
 
 @NgModule({
   declarations: [
@@ -24,7 +29,11 @@ import { AuthInterceptor } from './interceptors/auth.interceptor';
     IncidentListComponent,
     IncidentMapComponent,
     WorkshopDashboardComponent,
-    MapPickerComponent
+    MapPickerComponent,
+    AdminWorkshopManagementComponent,
+    AdminClientManagementComponent,
+    AdminRentalManagementComponent,
+    AdminBitacoraComponent
   ],
   imports: [
     BrowserModule,
@@ -38,6 +47,11 @@ import { AuthInterceptor } from './interceptors/auth.interceptor';
     {
       provide: HTTP_INTERCEPTORS,
       useClass: AuthInterceptor,
+      multi: true
+    },
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuditInterceptor,
       multi: true
     }
   ],

@@ -15,6 +15,46 @@ class HomeScreen extends StatelessWidget {
         title: const Text('AutoGo'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.delete_forever),
+            tooltip: 'Eliminar cuenta',
+            onPressed: () async {
+              final shouldDelete = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Eliminar cuenta'),
+                  content: const Text('Esta acción es permanente. ¿Deseas continuar?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Eliminar'),
+                    )
+                  ],
+                ),
+              );
+
+              if (shouldDelete != true) return;
+
+              final ok = await authService.deleteMyAccount();
+              if (!context.mounted) return;
+
+              if (ok) {
+                Navigator.pushReplacementNamed(context, '/login');
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('No se pudo eliminar la cuenta'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
               await authService.logout();
@@ -74,50 +114,56 @@ class HomeScreen extends StatelessWidget {
                       topRight: Radius.circular(30),
                     ),
                   ),
-                  child: Padding(
+                  child: ListView(
                     padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 16),
-                        _buildMainButton(
-                          context,
-                          icon: Icons.emergency,
-                          title: 'Solicitar Ayuda',
-                          subtitle: 'Reportar una emergencia',
-                          color: Colors.red,
-                          onTap: () {
-                            Navigator.pushNamed(context, '/emergency-form');
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildSecondaryButton(
-                                context,
-                                icon: Icons.directions_car,
-                                title: 'Mis Vehículos',
-                                onTap: () {
-                                  Navigator.pushNamed(context, '/vehicle-form');
-                                },
-                              ),
+                    children: [
+                      const SizedBox(height: 8),
+                      _buildMainButton(
+                        context,
+                        icon: Icons.emergency,
+                        title: 'Solicitar Ayuda',
+                        subtitle: 'Reportar una emergencia',
+                        color: Colors.red,
+                        onTap: () {
+                          Navigator.pushNamed(context, '/emergency-form');
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildSecondaryButton(
+                              context,
+                              icon: Icons.directions_car,
+                              title: 'Mis Vehículos',
+                              onTap: () {
+                                Navigator.pushNamed(context, '/vehicle-form');
+                              },
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildSecondaryButton(
-                                context,
-                                icon: Icons.list_alt,
-                                title: 'Mis Emergencias',
-                                onTap: () {
-                                  Navigator.pushNamed(context, '/emergency-list');
-                                },
-                              ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildSecondaryButton(
+                              context,
+                              icon: Icons.list_alt,
+                              title: 'Mis Emergencias',
+                              onTap: () {
+                                Navigator.pushNamed(context, '/emergency-list');
+                              },
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _buildSecondaryButtonLarge(
+                        context,
+                        icon: Icons.car_rental,
+                        title: 'Rentar Auto',
+                        onTap: () {
+                          Navigator.pushNamed(context, '/rental-vehicles');
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -136,6 +182,8 @@ class HomeScreen extends StatelessWidget {
     required Color color,
     required VoidCallback onTap,
   }) {
+    final isCompact = MediaQuery.of(context).size.width < 390;
+
     return Material(
       color: color,
       borderRadius: BorderRadius.circular(20),
@@ -144,19 +192,19 @@ class HomeScreen extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.all(24),
-          height: 150,
+          padding: EdgeInsets.all(isCompact ? 16 : 24),
+          height: isCompact ? 130 : 150,
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(isCompact ? 12 : 16),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: Icon(icon, size: 48, color: Colors.white),
+                child: Icon(icon, size: isCompact ? 36 : 48, color: Colors.white),
               ),
-              const SizedBox(width: 20),
+              SizedBox(width: isCompact ? 12 : 20),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -164,8 +212,10 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        fontSize: 24,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: isCompact ? 20 : 24,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -173,7 +223,9 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
                         fontSize: 14,
                         color: Colors.white70,
                       ),
@@ -181,7 +233,7 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, color: Colors.white),
+              Icon(Icons.arrow_forward_ios, color: Colors.white, size: isCompact ? 16 : 20),
             ],
           ),
         ),
@@ -195,6 +247,8 @@ class HomeScreen extends StatelessWidget {
     required String title,
     required VoidCallback onTap,
   }) {
+    final isCompact = MediaQuery.of(context).size.width < 390;
+
     return Material(
       color: const Color(0xFFF3F4F6),
       borderRadius: BorderRadius.circular(16),
@@ -202,12 +256,12 @@ class HomeScreen extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(20),
-          height: 120,
+          padding: EdgeInsets.all(isCompact ? 14 : 20),
+          height: isCompact ? 110 : 120,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 40, color: const Color(0xFF3B82F6)),
+              Icon(icon, size: isCompact ? 34 : 40, color: const Color(0xFF3B82F6)),
               const SizedBox(height: 8),
               Text(
                 title,
@@ -219,6 +273,57 @@ class HomeScreen extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF1F2937),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSecondaryButtonLarge(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    final isCompact = MediaQuery.of(context).size.width < 390;
+
+    return Material(
+      color: const Color(0xFFF3F4F6),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: EdgeInsets.all(isCompact ? 14 : 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: isCompact ? 28 : 32,
+                    color: const Color(0xFF3B82F6),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: isCompact ? 16 : 18,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF2C3E50),
+                    ),
+                  ),
+                ],
+              ),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: isCompact ? 16 : 18,
+                color: const Color(0xFF949599),
               ),
             ],
           ),

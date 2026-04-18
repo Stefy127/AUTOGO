@@ -251,6 +251,7 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
                         const SizedBox(height: 8),
                         DropdownButtonFormField<Vehicle>(
                           value: _selectedVehicle,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             hintText: 'Elige un vehículo',
                             prefixIcon: Icon(Icons.directions_car),
@@ -260,6 +261,7 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
                               value: vehicle,
                               child: Text(
                                 '${vehicle.brand} ${vehicle.model} - ${vehicle.plate}',
+                                overflow: TextOverflow.ellipsis,
                               ),
                             );
                           }).toList(),
@@ -295,18 +297,30 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
                           value: _selectedPriority,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             hintText: 'Selecciona prioridad',
                             prefixIcon: Icon(Icons.priority_high),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'low', child: Text('🟢 Baja - Puedo esperar')),
-                            DropdownMenuItem(value: 'medium', child: Text('🟡 Media - Necesito ayuda pronto')),
-                            DropdownMenuItem(value: 'high', child: Text('🔴 Alta - Es urgente')),
+                            DropdownMenuItem(value: 'low', child: Text('🟢 Baja')),
+                            DropdownMenuItem(value: 'medium', child: Text('🟡 Media')),
+                            DropdownMenuItem(value: 'high', child: Text('🔴 Alta')),
                           ],
                           onChanged: (value) {
                             setState(() => _selectedPriority = value!);
                           },
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            _selectedPriority == 'high'
+                                ? 'Urgente'
+                                : _selectedPriority == 'medium'
+                                    ? 'Necesito ayuda pronto'
+                                    : 'Puedo esperar',
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
                         ),
                         const SizedBox(height: 24),
                         const Text(
