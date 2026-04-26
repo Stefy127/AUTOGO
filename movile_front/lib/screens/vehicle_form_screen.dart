@@ -5,7 +5,9 @@ import '../services/api_service.dart';
 import '../models/models.dart';
 
 class VehicleFormScreen extends StatefulWidget {
-  const VehicleFormScreen({super.key});
+  final Vehicle? initialVehicle;
+
+  const VehicleFormScreen({super.key, this.initialVehicle});
 
   @override
   State<VehicleFormScreen> createState() => _VehicleFormScreenState();
@@ -19,6 +21,21 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   final _plateController = TextEditingController();
   final _colorController = TextEditingController();
   bool _isLoading = false;
+
+  bool get _isEditMode => widget.initialVehicle?.id != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final vehicle = widget.initialVehicle;
+    if (vehicle != null) {
+      _brandController.text = vehicle.brand;
+      _modelController.text = vehicle.model;
+      _yearController.text = vehicle.year.toString();
+      _plateController.text = vehicle.plate;
+      _colorController.text = vehicle.color ?? '';
+    }
+  }
 
   @override
   void dispose() {
@@ -47,22 +64,32 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
         color: _colorController.text.trim(),
       );
 
-      await apiService.post(
-        '/vehicles',
-        vehicle.toJson(),
-        token: authService.token,
-      );
+      if (_isEditMode) {
+        await apiService.put(
+          '/vehicles/${widget.initialVehicle!.id}',
+          vehicle.toJson(),
+          token: authService.token,
+        );
+      } else {
+        await apiService.post(
+          '/vehicles',
+          vehicle.toJson(),
+          token: authService.token,
+        );
+      }
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vehículo registrado exitosamente'),
+        SnackBar(
+          content: Text(_isEditMode
+              ? 'Vehículo actualizado exitosamente'
+              : 'Vehículo registrado exitosamente'),
           backgroundColor: Colors.green,
         ),
       );
 
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
 
@@ -83,7 +110,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Registrar Vehículo'),
+        title: Text(_isEditMode ? 'Editar Vehículo' : 'Registrar Vehículo'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -162,7 +189,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text('Registrar Vehículo'),
+                      : Text(_isEditMode ? 'Guardar Cambios' : 'Registrar Vehículo'),
               ),
             ],
           ),

@@ -151,7 +151,8 @@ Accede en: http://localhost:4200
 - ✅ **Asignación Inteligente**: Algoritmo de scoring (distancia, disponibilidad, prioridad)
 - ✅ **Integración Mapbox**: Geocoding, rutas, distancias
 - ✅ **Sistema de Prioridades**: Bajo, Medio, Alto
-- ✅ **5 Estados de Incidente**: pending, accepted, in_progress, completed, cancelled
+- ✅ **Flujo Marketplace Multi-Oferta**: talleres compiten con ofertas por incidente
+- ✅ **7 Estados de Incidente**: pending, waiting_offers, assigned, accepted, in_progress, completed, cancelled
 - ✅ **Clasificación IA**: Estructura preparada para OpenAI/Google Cloud
 - ✅ **Panel de Admin**: Estadísticas globales, gestión de talleres, reportes de comisiones
 
@@ -165,7 +166,7 @@ Accede en: http://localhost:4200
     - ✅ Tabla de emergencias recientes (últimas 5 con detalles completos)
   - ✅ **Vista Editar Información**: Formulario completo del taller con GPS opcional
   - ✅ **Vista Agregar Mecánico**: Formulario + lista de mecánicos registrados con estados
-  - ✅ **Vista Emergencias Disponibles**: Cards con análisis IA y botones aceptar/rechazar
+  - ✅ **Vista Emergencias Disponibles**: Cards con análisis IA y envío de ofertas
   - ✅ **Vista Historial**: Tabla completa de emergencias completadas/canceladas con ganancias
   
 - ✅ **Registro de Talleres Mejorado**:
@@ -182,7 +183,7 @@ Accede en: http://localhost:4200
   
 - ✅ **Visualización Mejorada**:
   - ✅ Badges coloridos de prioridad (🔴 Alta, 🟡 Media, 🟢 Baja)
-  - ✅ Badges de estado (pending, accepted, in_progress, completed, cancelled)
+  - ✅ Badges de estado (pending, waiting_offers, assigned, accepted, in_progress, completed, cancelled)
   - ✅ Resumen de análisis IA con icono 🤖 en cards de incidentes
   - ✅ Información de pago y comisiones en historial
   - ✅ Diseño responsive con sidebar colapsable en móviles
@@ -248,20 +249,26 @@ docker exec -it autogo_postgres psql -U autogo -d autogo_db
 ### Incidentes
 - `POST /incidents` - Crear incidente (con prioridad)
 - `GET /incidents` - Listar incidentes (filtrado por rol)
+- `GET /incidents/available` - Incidentes abiertos para talleres (marketplace)
 - `GET /incidents/{id}` - Obtener incidente por ID
+- `GET /incidents/{id}/offers` - Listar ofertas del incidente
 - `PATCH /incidents/{id}` - Actualizar incidente
 - `DELETE /incidents/{id}` - Eliminar incidente
 - `GET /incidents/{id}/history` - Historial del incidente
 - `POST /incidents/{id}/cancel` - Cancelar incidente
 
-### 🆕 Talleres (CICLO 2) - 9 Endpoints
+### 🆕 Ofertas Marketplace
+- `POST /offers` - Enviar oferta de taller para un incidente
+- `POST /offers/{id}/accept` - Cliente acepta una oferta
+
+### 🆕 Talleres (CICLO 2)
 - `POST /workshops` - Crear taller (requiere rol WORKSHOP)
 - `GET /workshops/me` - Obtener mi taller
 - `PATCH /workshops/me` - Actualizar mi taller
 - `POST /workshops/me/technicians` - Agregar mecánico a mi taller
 - `GET /workshops/me/technicians` - Listar mecánicos de mi taller
 - `GET /workshops/incidents/available` - Ver incidentes disponibles en el área
-- `POST /workshops/incidents/{id}/accept` - Aceptar incidente (con asignación de mecánico)
+- `POST /workshops/incidents/{id}/accept` - Legacy (deshabilitado para forzar flujo de ofertas)
 - `POST /workshops/incidents/{id}/reject` - Rechazar incidente
 - `GET /workshops/me/stats` - Estadísticas del taller
 
@@ -284,7 +291,7 @@ docker exec -it autogo_postgres psql -U autogo -d autogo_db
 - `GET /admin/users` - Listar todos los usuarios
 - `DELETE /admin/users/{id}` - Eliminar usuario
 
-**Total:** 34 endpoints operativos
+**Nota:** el total real de endpoints puede variar según versión del branch.
 
 ---
 
@@ -305,6 +312,88 @@ docker-compose down -v
 docker-compose up --build
 ```
 
+### Migración Marketplace (offers + estados)
+
+Con el stack Docker arriba, ejecuta:
+
+```bash
+docker exec -i autogo_postgres psql -v ON_ERROR_STOP=1 -U autogo -d autogo_db < backend/migrations/2026_04_24_marketplace_offers.sql
+```
+
+---
+
+## ☁️ Google Cloud (Deploy Productivo)
+
+Proyecto desplegado en Cloud Run con Artifact Registry.
+
+### Requisitos
+- Cuenta autenticada en `gcloud`
+- Docker instalado y en ejecución
+- Permisos sobre Cloud Run, Artifact Registry y Cloud Build
+
+### 1) Configurar proyecto/región
+
+```bash
+gcloud config set project autogo-492919
+gcloud config set run/region us-central1
+```
+
+### 2) Login Docker para Artifact Registry
+
+```bash
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://us-central1-docker.pkg.dev
+```
+
+### 3) Construir y publicar imágenes
+
+```bash
+cd /home/angel/Escritorio/AutoGo
+TS=$(date +%Y%m%d%H%M%S)
+
+docker build -t us-central1-docker.pkg.dev/autogo-492919/autogo/autogo-backend:$TS ./backend
+docker push us-central1-docker.pkg.dev/autogo-492919/autogo/autogo-backend:$TS
+
+docker build -t us-central1-docker.pkg.dev/autogo-492919/autogo/autogo-frontend:$TS ./frontend
+docker push us-central1-docker.pkg.dev/autogo-492919/autogo/autogo-frontend:$TS
+```
+
+### 4) Desplegar servicios en Cloud Run
+
+```bash
+gcloud run deploy autogo-backend \
+  --image us-central1-docker.pkg.dev/autogo-492919/autogo/autogo-backend:$TS \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --quiet
+
+gcloud run deploy autogo-frontend \
+  --image us-central1-docker.pkg.dev/autogo-492919/autogo/autogo-frontend:$TS \
+  --platform managed \
+  --region us-central1 \
+  --port 80 \
+  --allow-unauthenticated \
+  --quiet
+```
+
+### 5) Verificar URLs y revisión activa
+
+```bash
+gcloud run services describe autogo-backend --region us-central1 --format='value(status.url,status.latestReadyRevisionName,spec.template.spec.containers[0].image)'
+gcloud run services describe autogo-frontend --region us-central1 --format='value(status.url,status.latestReadyRevisionName,spec.template.spec.containers[0].image)'
+```
+
+### 6) Verificar salud del backend
+
+```bash
+BACKEND_URL=$(gcloud run services describe autogo-backend --region us-central1 --format='value(status.url)')
+curl -i "$BACKEND_URL/health"
+```
+
+### 7) CORS y migraciones en producción
+- El backend productivo ya está configurado con CORS para los dominios del frontend de Cloud Run.
+- El backend aplica migraciones SQL críticas al iniciar (marketplace + technician portal), para evitar errores por columnas faltantes como `technicians.access_code` o `incidents.payment_method`.
+
 ---
 
 ### 🚀 Características Destacadas
@@ -317,8 +406,8 @@ docker-compose up --build
 2. **Gestión de Talleres**
    - Perfil completo del taller (ubicación en mapa)
    - Registro y gestión de mecánicos
-   - Aceptación/rechazo de emergencias
-   - Asignación automática por proximidad
+  - Envío de ofertas por incidente
+  - Selección de oferta por el cliente
    - Tracking de comisiones (10% default)
 
 3. **Sistema Inteligente**

@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import 'emergency_offers_screen.dart';
+import 'payment_qr_screen.dart';
 
 class EmergencyListScreen extends StatefulWidget {
   const EmergencyListScreen({super.key});
@@ -51,6 +53,10 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
     switch (status) {
       case 'pending':
         return Colors.orange;
+      case 'waiting_offers':
+        return Colors.deepOrange;
+      case 'assigned':
+        return Colors.lightBlue;
       case 'accepted':
         return Colors.blue;
       case 'in_progress':
@@ -68,6 +74,10 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
     switch (status) {
       case 'pending':
         return 'Pendiente';
+      case 'waiting_offers':
+        return 'Esperando Ofertas';
+      case 'assigned':
+        return 'Asignada';
       case 'accepted':
         return 'Aceptada';
       case 'in_progress':
@@ -170,53 +180,47 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                Wrap(
+                                  runSpacing: 8,
+                                  spacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: _getStatusColor(incident.status).withOpacity(0.2),
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              _getStatusText(incident.status),
-                                              style: TextStyle(
-                                                color: _getStatusColor(incident.status),
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: _getPriorityColor(incident.priority).withOpacity(0.2),
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            child: Text(
-                                              _getPriorityText(incident.priority),
-                                              style: TextStyle(
-                                                color: _getPriorityColor(incident.priority),
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(incident.status).withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        _getStatusText(incident.status),
+                                        style: TextStyle(
+                                          color: _getStatusColor(incident.status),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _getPriorityColor(incident.priority).withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        _getPriorityText(incident.priority),
+                                        style: TextStyle(
+                                          color: _getPriorityColor(incident.priority),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
                                     Text(
                                       incident.createdAt != null
                                           ? DateFormat('dd/MM/yy HH:mm').format(incident.createdAt!)
@@ -360,7 +364,10 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -376,7 +383,6 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -391,7 +397,6 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                           ),
                         ),
                       ),
-                      const Spacer(),
                       Text(
                         incident.createdAt != null
                             ? DateFormat('dd/MM/yyyy HH:mm').format(incident.createdAt!)
@@ -654,6 +659,55 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                             ],
                           ),
                         ],
+                      ),
+                    ),
+                    if (incident.payment!.status != 'paid' && incident.status == 'completed') ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final result = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PaymentQrScreen(incident: incident),
+                              ),
+                            );
+                            if (!context.mounted) return;
+                            if (result == true) {
+                              Navigator.pop(context);
+                              _loadIncidents();
+                            }
+                          },
+                          icon: const Icon(Icons.qr_code_2),
+                          label: const Text('Pagar con QR'),
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (incident.id != null &&
+                      (incident.status == 'pending' ||
+                          incident.status == 'waiting_offers' ||
+                          incident.status == 'assigned')) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final result = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EmergencyOffersScreen(incident: incident),
+                            ),
+                          );
+                          if (!context.mounted) return;
+                          if (result == true) {
+                            Navigator.pop(context);
+                            _loadIncidents();
+                          }
+                        },
+                        icon: const Icon(Icons.local_offer),
+                        label: const Text('Ver Ofertas de Talleres'),
                       ),
                     ),
                   ],

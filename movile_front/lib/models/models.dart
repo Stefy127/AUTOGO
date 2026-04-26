@@ -130,6 +130,58 @@ class Technician {
   }
 }
 
+class Offer {
+  final int id;
+  final int incidentId;
+  final int workshopId;
+  final int? technicianId;
+  final double amount;
+  final int? estimatedArrivalTime;
+  final String? notes;
+  final String status;
+  final DateTime createdAt;
+  final Workshop? workshop;
+  final Technician? technician;
+
+  Offer({
+    required this.id,
+    required this.incidentId,
+    required this.workshopId,
+    this.technicianId,
+    required this.amount,
+    this.estimatedArrivalTime,
+    this.notes,
+    required this.status,
+    required this.createdAt,
+    this.workshop,
+    this.technician,
+  });
+
+  factory Offer.fromJson(Map<String, dynamic> json) {
+    final rawAmount = json['amount'];
+    final parsedAmount = rawAmount is num
+        ? rawAmount.toDouble()
+        : double.tryParse(rawAmount?.toString() ?? '') ?? 0;
+
+    final rawEta = json['estimated_arrival_time'];
+    final parsedEta = rawEta is int ? rawEta : int.tryParse(rawEta?.toString() ?? '');
+
+    return Offer(
+      id: json['id'],
+      incidentId: json['incident_id'],
+      workshopId: json['workshop_id'],
+      technicianId: json['technician_id'],
+      amount: parsedAmount,
+      estimatedArrivalTime: parsedEta,
+      notes: json['notes'],
+      status: (json['status']?.toString() ?? 'pending').toLowerCase(),
+      createdAt: DateTime.parse(json['created_at']),
+      workshop: json['workshop'] != null ? Workshop.fromJson(json['workshop']) : null,
+      technician: json['technician'] != null ? Technician.fromJson(json['technician']) : null,
+    );
+  }
+}
+
 class Payment {
   final int id;
   final int incidentId;

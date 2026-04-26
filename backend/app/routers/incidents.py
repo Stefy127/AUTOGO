@@ -6,7 +6,6 @@ from app.database import get_db
 from app import models, schemas
 from app.auth import get_current_active_user
 from app.services.ai_service import AIService
-from app.services.assignment_service import AssignmentService
 from app.services.mapbox_service import MapboxService
 import os
 
@@ -14,7 +13,6 @@ router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
 # Initialize services
 ai_service = AIService()
-assignment_service = AssignmentService()
 mapbox_service = MapboxService()
 
 
@@ -75,18 +73,6 @@ async def create_incident(
     db.commit()
     db.refresh(db_incident)
     
-    # Try to auto-assign to best workshop (only if valid coordinates)
-    if db_incident.latitude and db_incident.longitude and db_incident.latitude != 0.0 and db_incident.longitude != 0.0:
-        best_workshop = await assignment_service.find_best_workshop(
-            db=db,
-            incident=db_incident
-        )
-        
-        if best_workshop:
-            db_incident.workshop_id = best_workshop.id
-            db.commit()
-            db.refresh(db_incident)
-    
     # Create history entry
     history = models.IncidentHistory(
         incident_id=db_incident.id,
@@ -119,7 +105,9 @@ def get_incidents(
         joinedload(models.Incident.vehicle),
         joinedload(models.Incident.workshop),
         joinedload(models.Incident.technician),
-        joinedload(models.Incident.payment)
+        joinedload(models.Incident.payment),
+        joinedload(models.Incident.offers).joinedload(models.Offer.workshop),
+        joinedload(models.Incident.offers).joinedload(models.Offer.technician)
     )
     
     if current_user.role == models.UserRole.CLIENT:
@@ -146,6 +134,101 @@ def get_incidents(
     return incidents
 
 
+@router.get("/available", response_model=List[schemas.IncidentResponse])
+def get_available_incidents_for_workshops(
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Incidentes visibles para talleres en modo marketplace.
+    Solo talleres: incidentes pendientes o esperando ofertas y sin asignación final.
+    """
+    if current_user.role != models.UserRole.WORKSHOP:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only workshops can access available incidents"
+        )
+
+    workshop = db.query(models.Workshop).filter(
+        models.Workshop.owner_id == current_user.id
+    ).first()
+
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workshop profile not found"
+        )
+
+    incidents = db.query(models.Incident).options(
+        joinedload(models.Incident.user),
+        joinedload(models.Incident.vehicle),
+        joinedload(models.Incident.offers)
+    ).filter(
+        models.Incident.workshop_id.is_(None),
+        models.Incident.status.in_([
+            models.IncidentStatus.PENDING,
+            models.IncidentStatus.WAITING_OFFERS
+        ])
+    ).order_by(models.Incident.created_at.desc()).all()
+
+    return incidents
+
+
+@router.get("/{incident_id}/offers", response_model=List[schemas.OfferResponse])
+def get_incident_offers(
+    incident_id: int,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Lista ofertas de un incidente. Cliente solo puede ver las de sus incidentes.
+    """
+    incident = db.query(models.Incident).filter(
+        models.Incident.id == incident_id
+    ).first()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found"
+        )
+
+    if current_user.role == models.UserRole.CLIENT and incident.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view offers for this incident"
+        )
+
+    if current_user.role == models.UserRole.WORKSHOP:
+        workshop = db.query(models.Workshop).filter(
+            models.Workshop.owner_id == current_user.id
+        ).first()
+
+        if not workshop:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workshop profile not found"
+            )
+
+        offers = db.query(models.Offer).options(
+            joinedload(models.Offer.workshop),
+            joinedload(models.Offer.technician)
+        ).filter(
+            models.Offer.incident_id == incident_id,
+            models.Offer.workshop_id == workshop.id
+        ).order_by(models.Offer.created_at.desc()).all()
+        return offers
+
+    offers = db.query(models.Offer).options(
+        joinedload(models.Offer.workshop),
+        joinedload(models.Offer.technician)
+    ).filter(
+        models.Offer.incident_id == incident_id
+    ).order_by(models.Offer.created_at.desc()).all()
+
+    return offers
+
+
 @router.get("/{incident_id}", response_model=schemas.IncidentResponse)
 def get_incident(
     incident_id: int,
@@ -157,7 +240,9 @@ def get_incident(
         joinedload(models.Incident.vehicle),
         joinedload(models.Incident.workshop),
         joinedload(models.Incident.technician),
-        joinedload(models.Incident.payment)
+        joinedload(models.Incident.payment),
+        joinedload(models.Incident.offers).joinedload(models.Offer.workshop),
+        joinedload(models.Incident.offers).joinedload(models.Offer.technician)
     ).filter(
         models.Incident.id == incident_id
     ).first()
@@ -225,8 +310,9 @@ def update_incident(
             )
     # ADMIN can update any incident
     
-    # Store old status for history
+    # Store old values for history and availability updates
     old_status = incident.status
+    old_technician_id = incident.technician_id
     
     # Update fields
     update_data = incident_update.dict(exclude_unset=True)
@@ -249,6 +335,26 @@ def update_incident(
                 ).first()
                 if technician:
                     technician.is_available = True
+
+    # If a technician is newly assigned, mark that technician as unavailable.
+    if "technician_id" in update_data and update_data["technician_id"] is not None:
+        assigned_technician = db.query(models.Technician).filter(
+            models.Technician.id == update_data["technician_id"]
+        ).first()
+        if assigned_technician:
+            assigned_technician.is_available = False
+
+    # If technician changed, release previous technician.
+    if (
+        "technician_id" in update_data
+        and old_technician_id is not None
+        and update_data["technician_id"] != old_technician_id
+    ):
+        previous_technician = db.query(models.Technician).filter(
+            models.Technician.id == old_technician_id
+        ).first()
+        if previous_technician:
+            previous_technician.is_available = True
     
     # Apply updates
     for field, value in update_data.items():

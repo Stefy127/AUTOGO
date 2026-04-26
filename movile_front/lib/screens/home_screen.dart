@@ -15,44 +15,9 @@ class HomeScreen extends StatelessWidget {
         title: const Text('AutoGo'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_forever),
-            tooltip: 'Eliminar cuenta',
-            onPressed: () async {
-              final shouldDelete = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Eliminar cuenta'),
-                  content: const Text('Esta acción es permanente. ¿Deseas continuar?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancelar'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Eliminar'),
-                    )
-                  ],
-                ),
-              );
-
-              if (shouldDelete != true) return;
-
-              final ok = await authService.deleteMyAccount();
-              if (!context.mounted) return;
-
-              if (ok) {
-                Navigator.pushReplacementNamed(context, '/login');
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('No se pudo eliminar la cuenta'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Mi perfil',
+            onPressed: () => Navigator.pushNamed(context, '/profile'),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -137,7 +102,7 @@ class HomeScreen extends StatelessWidget {
                               icon: Icons.directions_car,
                               title: 'Mis Vehículos',
                               onTap: () {
-                                Navigator.pushNamed(context, '/vehicle-form');
+                                Navigator.pushNamed(context, '/vehicles');
                               },
                             ),
                           ),

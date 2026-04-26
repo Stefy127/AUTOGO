@@ -1,9 +1,9 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
-import { Workshop, Technician, Incident, WorkshopStats } from '../models/models';
+import { Workshop, Technician, Incident, WorkshopStats, WorkshopPaymentQr, Offer } from '../models/models';
 
 @Injectable({
   providedIn: 'root'
@@ -48,13 +48,26 @@ export class WorkshopService {
     );
   }
 
+  getMyPaymentQr(): Observable<WorkshopPaymentQr> {
+    return this.http.get<WorkshopPaymentQr>(
+      `${this.apiUrl}/workshops/me/payment-qr`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  saveMyPaymentQr(qrImageUrl: string): Observable<WorkshopPaymentQr> {
+    return this.http.put<WorkshopPaymentQr>(
+      `${this.apiUrl}/workshops/me/payment-qr`,
+      { qr_image_url: qrImageUrl },
+      { headers: this.getHeaders() }
+    );
+  }
+
   // ==================== TECHNICIAN MANAGEMENT ====================
 
   addTechnician(technician: Partial<Technician>): Observable<Technician> {
-    // Get workshop ID first, then add technician
-    // The backend expects workshop_id in the URL, which is extracted from the token
     return this.http.post<Technician>(
-      `${this.apiUrl}/workshops/me/technicians`,
+      `${this.apiUrl}/technicians`,
       technician,
       { headers: this.getHeaders() }
     );
@@ -62,7 +75,30 @@ export class WorkshopService {
 
   getMyTechnicians(): Observable<Technician[]> {
     return this.http.get<Technician[]>(
-      `${this.apiUrl}/workshops/me/technicians`,
+      `${this.apiUrl}/technicians`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  updateTechnician(technicianId: number, technician: Partial<Technician>): Observable<Technician> {
+    return this.http.put<Technician>(
+      `${this.apiUrl}/technicians/${technicianId}`,
+      technician,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  deleteTechnician(technicianId: number): Observable<any> {
+    return this.http.delete<any>(
+      `${this.apiUrl}/technicians/${technicianId}`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  regenerateAccessCode(technicianId: number): Observable<Technician> {
+    return this.http.post<Technician>(
+      `${this.apiUrl}/technicians/${technicianId}/access-code/regenerate`,
+      {},
       { headers: this.getHeaders() }
     );
   }
@@ -76,13 +112,14 @@ export class WorkshopService {
     );
   }
 
-  acceptIncident(incidentId: number, technicianId: number, estimatedAmount: number): Observable<Incident> {
+  createOffer(incidentId: number, technicianId: number, amount: number): Observable<Offer> {
     const body = {
       technician_id: technicianId,
-      estimated_amount: estimatedAmount
+      amount,
+      incident_id: incidentId
     };
-    return this.http.post<Incident>(
-      `${this.apiUrl}/workshops/incidents/${incidentId}/accept`,
+    return this.http.post<Offer>(
+      `${this.apiUrl}/offers`,
       body,
       { headers: this.getHeaders() }
     );
@@ -110,6 +147,32 @@ export class WorkshopService {
     return this.http.get<WorkshopStats>(
       `${this.apiUrl}/workshops/me/stats`,
       { headers: this.getHeaders() }
+    );
+  }
+
+  downloadIncidentsReportPdf(filters: {
+    startDate?: string;
+    endDate?: string;
+    technicianId?: number;
+  }): Observable<Blob> {
+    let params = new HttpParams();
+    if (filters.startDate) {
+      params = params.set('start_date', filters.startDate);
+    }
+    if (filters.endDate) {
+      params = params.set('end_date', filters.endDate);
+    }
+    if (filters.technicianId) {
+      params = params.set('technician_id', String(filters.technicianId));
+    }
+
+    return this.http.get(
+      `${this.apiUrl}/workshops/me/reports/incidents/pdf`,
+      {
+        headers: this.getHeaders(),
+        params,
+        responseType: 'blob'
+      }
     );
   }
 }

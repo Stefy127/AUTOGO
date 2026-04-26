@@ -1,6 +1,6 @@
 <div class="workshop-layout">
   <!-- Sidebar -->
-  <aside class="sidebar">
+  <aside class="sidebar" [class.closed]="!sidebarOpen" [class.open]="sidebarOpen">
     <div class="sidebar-header">
       <div class="logo">🔧</div>
       <h2>{{ workshop?.name || 'Mi Taller' }}</h2>
@@ -13,7 +13,7 @@
         [class.active]="currentView === 'dashboard'"
         (click)="navigateTo('dashboard')">
         <span class="icon">📊</span>
-        <span>Dashboard</span>
+        <span *ngIf="sidebarOpen">Dashboard</span>
       </button>
 
       <button 
@@ -21,7 +21,7 @@
         [class.active]="currentView === 'edit-info'"
         (click)="navigateTo('edit-info')">
         <span class="icon">⚙️</span>
-        <span>Editar Información</span>
+        <span *ngIf="sidebarOpen">Editar Información</span>
       </button>
 
       <button 
@@ -29,7 +29,7 @@
         [class.active]="currentView === 'add-technician'"
         (click)="navigateTo('add-technician')">
         <span class="icon">👨‍🔧</span>
-        <span>Agregar Mecánico</span>
+        <span *ngIf="sidebarOpen">Agregar Mecánico</span>
       </button>
 
       <button 
@@ -37,7 +37,7 @@
         [class.active]="currentView === 'incidents-available'"
         (click)="navigateTo('incidents-available')">
         <span class="icon">🆕</span>
-        <span>Emergencias Disponibles</span>
+        <span *ngIf="sidebarOpen">Emergencias Disponibles</span>
         <span class="badge-count" *ngIf="availableIncidents.length > 0">{{ availableIncidents.length }}</span>
       </button>
 
@@ -46,7 +46,15 @@
         [class.active]="currentView === 'incidents-history'"
         (click)="navigateTo('incidents-history')">
         <span class="icon">📜</span>
-        <span>Historial</span>
+        <span *ngIf="sidebarOpen">Historial</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="currentView === 'reports'"
+        (click)="navigateTo('reports')">
+        <span class="icon">🧾</span>
+        <span *ngIf="sidebarOpen">Reporte</span>
       </button>
     </nav>
 
@@ -61,20 +69,28 @@
   </aside>
 
   <!-- Main Content -->
-  <main class="main-content">
+  <main class="main-content" [class.expanded]="!sidebarOpen">
     <!-- Header -->
     <header class="content-header">
+      <button class="sidebar-toggle-btn" (click)="toggleSidebar()">☰</button>
       <h1 *ngIf="currentView === 'dashboard'">Dashboard Principal</h1>
       <h1 *ngIf="currentView === 'edit-info'">{{ workshop ? 'Editar Información' : 'Registrar Taller' }}</h1>
       <h1 *ngIf="currentView === 'add-technician'">Agregar Mecánico</h1>
       <h1 *ngIf="currentView === 'incidents-available'">Emergencias Disponibles</h1>
       <h1 *ngIf="currentView === 'incidents-history'">Historial de Emergencias</h1>
+      <h1 *ngIf="currentView === 'reports'">Reporte de Emergencias</h1>
     </header>
 
     <!-- Error Message -->
     <div class="alert alert-error" *ngIf="error">
       ⚠️ {{ error }}
       <button class="close-btn" (click)="error = ''">×</button>
+    </div>
+
+    <!-- Success Message -->
+    <div class="alert alert-success" *ngIf="successMessage">
+      {{ successMessage }}
+      <button class="close-btn" (click)="successMessage = ''">×</button>
     </div>
 
     <!-- Loading -->
@@ -109,7 +125,7 @@
           </div>
           <div class="info-item">
             <label>Comisión:</label>
-            <span>{{ (workshop.commission_rate * 100).toFixed(0) }}%</span>
+            <label>10%</label>
           </div>
           <div class="info-item">
             <label>Mecánicos:</label>
@@ -148,7 +164,7 @@
         <div class="stat-box earnings">
           <div class="stat-icon">💰</div>
           <div class="stat-content">
-            <h4>\${{ getTotalEarnings().toFixed(2) }}</h4>
+            <h4>${{ getTotalEarnings().toFixed(2) }}</h4>
             <p>Ganancias Totales</p>
           </div>
         </div>
@@ -281,6 +297,31 @@
               placeholder="5551234567">
           </div>
 
+          <div class="form-group">
+            <label>Imagen QR de pago del taller</label>
+            <input
+              type="file"
+              class="form-control"
+              accept="image/*"
+              (change)="onQrFileSelected($event)">
+            <small class="hint">Sube un archivo PNG, JPG, JPEG, WEBP u otra imagen compatible</small>
+          </div>
+
+          <div class="form-group">
+            <label>O pega una URL/base64 del QR (opcional)</label>
+            <input
+              type="text"
+              class="form-control"
+              [(ngModel)]="workshopQrImageUrl"
+              name="workshopQrImageUrl"
+              placeholder="https://.../qr-del-taller.png o data:image/png;base64,...">
+          </div>
+
+          <div class="form-group" *ngIf="workshopQrPreviewData">
+            <label>Vista previa QR</label>
+            <img [src]="workshopQrPreviewData" alt="QR del taller" class="qr-preview-image">
+          </div>
+
           <div class="form-row">
             <div class="form-group">
               <label>Latitud (Auto-capturada)</label>
@@ -307,6 +348,7 @@
 
           <div class="form-actions">
             <button type="submit" class="btn-primary">💾 Guardar Información</button>
+            <button type="button" class="btn-secondary" (click)="savePaymentQr()">Guardar QR</button>
             <button type="button" class="btn-secondary" *ngIf="workshop" (click)="navigateTo('dashboard')">
               Cancelar
             </button>
@@ -358,13 +400,55 @@
           <h3>Mecánicos Registrados ({{ technicians.length }})</h3>
           <div class="tech-grid">
             <div class="tech-card" *ngFor="let tech of technicians">
-              <div class="tech-avatar">👨‍🔧</div>
-              <div class="tech-info">
-                <h4>{{ tech.name }}</h4>
-                <p *ngIf="tech.phone">📱 {{ tech.phone }}</p>
-                <span class="tech-status" [class.available]="tech.is_available">
-                  {{ tech.is_available ? '✓ Disponible' : '⏳ Ocupado' }}
-                </span>
+              <div *ngIf="editingTechnicianId !== tech.id" class="tech-view-mode">
+                <div class="tech-avatar">👨‍🔧</div>
+                <div class="tech-info">
+                  <h4>{{ tech.name }}</h4>
+                  <p *ngIf="tech.phone">📱 {{ tech.phone }}</p>
+                  <span class="tech-status" [class.available]="tech.is_available">
+                    {{ tech.is_available ? '✓ Disponible' : '⏳ Ocupado' }}
+                  </span>
+                  <!-- Access Code Section -->
+                  <div class="access-code-box">
+                    <label>🔑 Código de acceso</label>
+                    <div class="access-code-row">
+                      <span class="access-code-value">{{ tech.access_code || '— sin código —' }}</span>
+                      <button class="btn-mini btn-copy" *ngIf="tech.access_code" (click)="copyAccessCode(tech.access_code!)">
+                        📋 Copiar
+                      </button>
+                    </div>
+                    <small *ngIf="tech.access_code_expires_at" class="code-expiry">
+                      Expira: {{ tech.access_code_expires_at | date:'dd/MM/yyyy HH:mm' }}
+                    </small>
+                  </div>
+                  <div class="tech-actions">
+                    <button class="btn-mini btn-edit" (click)="startEditTechnician(tech)">Editar</button>
+                    <button class="btn-mini btn-toggle" (click)="toggleTechnicianAvailability(tech)">
+                      {{ tech.is_available ? 'Marcar ocupado' : 'Marcar disponible' }}
+                    </button>
+                    <button class="btn-mini btn-regen" (click)="regenerateAccessCode(tech)">🔄 Regenerar código</button>
+                    <button class="btn-mini btn-delete" (click)="deleteTechnician(tech)">Eliminar</button>
+                  </div>
+                </div>
+              </div>
+
+              <div *ngIf="editingTechnicianId === tech.id" class="tech-edit-mode">
+                <div class="form-group">
+                  <label>Nombre</label>
+                  <input class="form-control" [(ngModel)]="technicianEditForm.name" name="editTechName{{tech.id}}">
+                </div>
+                <div class="form-group">
+                  <label>Teléfono</label>
+                  <input class="form-control" [(ngModel)]="technicianEditForm.phone" name="editTechPhone{{tech.id}}">
+                </div>
+                <div class="form-check-row">
+                  <input type="checkbox" [(ngModel)]="technicianEditForm.is_available" name="editTechAvailable{{tech.id}}">
+                  <label>Disponible</label>
+                </div>
+                <div class="tech-actions">
+                  <button class="btn-mini btn-save" (click)="saveTechnician(tech.id)">Guardar</button>
+                  <button class="btn-mini btn-cancel" (click)="cancelEditTechnician()">Cancelar</button>
+                </div>
               </div>
             </div>
           </div>
@@ -387,6 +471,10 @@
 
           <h3>{{ incident.description }}</h3>
 
+          <div class="incident-image-wrapper" *ngIf="hasIncidentImage(incident)">
+            <img [src]="incident.image_url" alt="Imagen de la emergencia" class="incident-image-preview">
+          </div>
+
           <div class="incident-details">
             <p *ngIf="incident.location_text"><strong>📍 Ubicación:</strong> {{ incident.location_text }}</p>
             <p *ngIf="incident.vehicle"><strong>🚗 Vehículo:</strong> {{ incident.vehicle.brand }} {{ incident.vehicle.model }}</p>
@@ -401,10 +489,18 @@
 
           <div class="incident-actions">
             <button 
+              *ngIf="!hasMyPendingOffer(incident)"
               class="btn-success" 
               (click)="acceptIncident(incident)"
               [disabled]="technicians.length === 0">
-              ✅ Aceptar Emergencia
+              💰 Enviar Oferta
+            </button>
+            <button
+              *ngIf="hasMyPendingOffer(incident)"
+              class="btn-offer-sent"
+              type="button"
+              disabled>
+              ✅ Oferta enviada
             </button>
             <button class="btn-danger" (click)="rejectIncident(incident)">
               ❌ Rechazar
@@ -438,7 +534,13 @@
               <th>Prioridad</th>
               <th>Fecha Creación</th>
               <th>Fecha Completada</th>
+              <th>Imagen</th>
+              <th>Método de Pago</th>
+              <th>Estado de Pago</th>
+              <th>Fecha de Pago</th>
+              <th>Total Cobrado</th>
               <th>Ganancia</th>
+              <th>Ubicación</th>
             </tr>
           </thead>
           <tbody>
@@ -459,7 +561,18 @@
               </td>
               <td>{{ incident.created_at | date:'short' }}</td>
               <td>{{ incident.completed_at | date:'short' }}</td>
-              <td class="amount">\${{ incident.payment?.workshop_earnings?.toFixed(2) || '0.00' }}</td>
+              <td>
+                <ng-container *ngIf="hasIncidentImage(incident); else noIncidentImage">
+                  <img [src]="incident.image_url" alt="Imagen emergencia" class="history-image-thumb">
+                </ng-container>
+                <ng-template #noIncidentImage>-</ng-template>
+              </td>
+              <td>{{ getPaymentMethodText(incident.payment?.payment_method || incident.payment_method) }}</td>
+              <td>{{ incident.payment?.is_paid ? 'Pagado' : 'Pendiente' }}</td>
+              <td>{{ incident.payment?.paid_at ? (incident.payment?.paid_at | date:'short') : '-' }}</td>
+              <td class="amount">${{ incident.payment?.amount?.toFixed(2) || '0.00' }}</td>
+              <td class="amount">${{ incident.payment?.workshop_earnings?.toFixed(2) || '0.00' }}</td>
+              <td>{{ incident.location_text || '-' }}</td>
             </tr>
           </tbody>
         </table>
@@ -471,13 +584,55 @@
         <p>Aún no has completado ninguna emergencia</p>
       </div>
     </div>
+
+    <!-- VIEW: Reports -->
+    <div class="view-container" *ngIf="!loading && currentView === 'reports'">
+      <div class="form-card report-card">
+        <h3>🧾 Descargar reporte en PDF</h3>
+        <p class="report-help">Genera un reporte de emergencias atendidas. Puedes filtrar por fecha y/o mecánico.</p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Fecha inicial</label>
+            <input
+              type="date"
+              class="form-control"
+              [(ngModel)]="reportFilters.startDate"
+              name="reportStartDate">
+          </div>
+
+          <div class="form-group">
+            <label>Fecha final</label>
+            <input
+              type="date"
+              class="form-control"
+              [(ngModel)]="reportFilters.endDate"
+              name="reportEndDate">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Mecánico</label>
+          <select class="form-control" [(ngModel)]="reportFilters.technicianId" name="reportTechnicianId">
+            <option [ngValue]="undefined">Todos los mecánicos</option>
+            <option *ngFor="let tech of technicians" [ngValue]="tech.id">{{ tech.name }}</option>
+          </select>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn-primary" (click)="downloadReportPdf()" [disabled]="downloadingReport">
+            {{ downloadingReport ? 'Generando...' : '📥 Descargar PDF' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- MODAL: Accept Incident -->
   <div class="modal-overlay" *ngIf="showAcceptModal" (click)="cancelAcceptIncident()">
     <div class="modal-content" (click)="$event.stopPropagation()">
       <div class="modal-header">
-        <h2>✅ Aceptar Emergencia</h2>
+        <h2>💰 Enviar Oferta</h2>
         <button class="modal-close" (click)="cancelAcceptIncident()">×</button>
       </div>
 
@@ -526,16 +681,16 @@
               step="0.01"
               min="0"
               class="form-control"
-              [(ngModel)]="acceptForm.estimated_amount"
+              [(ngModel)]="acceptForm.amount"
               name="amount"
               required
               placeholder="Ej: 500.00">
             <small class="hint">
-              <strong>Comisión taller ({{ (workshop?.commission_rate || 0.10) * 100 }}%):</strong> 
-              ${{ ((acceptForm.estimated_amount || 0) * (workshop?.commission_rate || 0.10)).toFixed(2) }}
+              <strong>Ganancia mecánico ({{ (workshop?.commission_rate || 0.10) * 100 }}%):</strong> 
+              ${{ ((acceptForm.amount || 0) * (workshop?.commission_rate || 0.10)).toFixed(2) }}
               &nbsp;|&nbsp;
-              <strong>Ganancia mecánico ({{ (1 - (workshop?.commission_rate || 0.10)) * 100 }}%):</strong> 
-              ${{ ((acceptForm.estimated_amount || 0) * (1 - (workshop?.commission_rate || 0.10))).toFixed(2) }}
+              <strong>Comisión taller ({{ (1 - (workshop?.commission_rate || 0.10)) * 100 }}%):</strong> 
+              ${{ ((acceptForm.amount || 0) * (1 - (workshop?.commission_rate || 0.10))).toFixed(2) }}
             </small>
           </div>
         </form>
@@ -549,8 +704,8 @@
           type="button" 
           class="btn-success" 
           (click)="confirmAcceptIncident()"
-          [disabled]="!acceptForm.technician_id || !acceptForm.estimated_amount || (acceptForm.estimated_amount || 0) <= 0">
-          ✅ Confirmar y Aceptar
+          [disabled]="!acceptForm.technician_id || !acceptForm.amount || (acceptForm.amount || 0) <= 0">
+          ✅ Confirmar y Enviar
         </button>
       </div>
     </div>

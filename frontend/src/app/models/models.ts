@@ -46,6 +46,9 @@ export interface Technician {
   current_longitude?: number;
   created_at: string;
   updated_at: string;
+  access_code?: string;
+  access_code_expires_at?: string;
+  is_active?: boolean;
 }
 
 export interface Incident {
@@ -55,8 +58,9 @@ export interface Incident {
   workshop_id?: number;
   technician_id?: number;
   description: string;
-  status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'waiting_offers' | 'assigned' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high';
+  payment_method?: 'cash' | 'transfer' | 'qr';
   latitude?: number;
   longitude?: number;
   location_text?: string;
@@ -75,6 +79,22 @@ export interface Incident {
   workshop?: Workshop;
   technician?: Technician;
   payment?: Payment;
+  offers?: Offer[];
+}
+
+export interface Offer {
+  id: number;
+  incident_id: number;
+  workshop_id: number;
+  technician_id?: number;
+  amount: number;
+  estimated_arrival_time?: number;
+  notes?: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  updated_at: string;
+  workshop?: Workshop;
+  technician?: Technician;
 }
 
 export interface IncidentHistory {
@@ -90,7 +110,7 @@ export interface Payment {
   id: number;
   incident_id: number;
   amount: number;
-  payment_method: 'cash' | 'transfer';
+  payment_method: 'cash' | 'transfer' | 'qr';
   commission_percentage: number;
   commission_amount: number;
   workshop_earnings: number;
@@ -100,6 +120,12 @@ export interface Payment {
   notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkshopPaymentQr {
+  workshop_id: number;
+  qr_image_url: string;
+  updated_at?: string;
 }
 
 export interface WorkshopStats {

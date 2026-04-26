@@ -157,6 +157,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                           child: const Text('¿No tienes cuenta? Regístrate'),
                         ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/technician/access');
+                          },
+                          icon: const Icon(Icons.build_circle_outlined),
+                          label: const Text('Acceso para Mecánicos'),
+                        ),
                       ],
                     ),
                   ),

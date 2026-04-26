@@ -1,214 +1,234 @@
 """
-AI Service - Structure base para integración de IA
-Este módulo provee la estructura para funcionalidades de IA sin implementar modelos complejos
+AI Service — Google Gemini integration for AutoGo
+Provides: audio transcription, image analysis, priority classification, summary generation.
 """
-from typing import Optional, Dict
+from __future__ import annotations
+
 import base64
 import os
+import re
+from typing import Optional, Dict
+
+try:
+    import google.generativeai as genai
+    _GENAI_AVAILABLE = True
+except ImportError:
+    _GENAI_AVAILABLE = False
+    genai = None  # type: ignore
+
+# ─── Configuration ─────────────────────────────────────────────────────────────
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+_AI_ENABLED_ENV = os.getenv("AI_ENABLED", "false").lower() == "true"
+
+if _GENAI_AVAILABLE and _AI_ENABLED_ENV and _GEMINI_API_KEY:
+    genai.configure(api_key=_GEMINI_API_KEY)
+
+# ─── Priority keywords fallback ────────────────────────────────────────────────
+_HIGH_KEYWORDS = [
+    "accidente", "choque", "fuego", "incendio", "humo", "motor", "frenos", "batería",
+    "volcado", "volcadura", "no enciende", "no arranca", "arrancar", "sobrecalentamiento",
+    "urgente", "emergencia grave", "herido", "sin frenos", "falla mecánica grave",
+    "ruido extraño", "pérdida de control",
+]
+_LOW_KEYWORDS = [
+    "gasolina", "combustible", "tanque vacío", "llave adentro",
+    "rayón", "raspón", "faro fundido", "luz", "llanta baja", "aire", "aceite bajo",
+]
+
+
+def _rule_priority(text: str) -> str:
+    t = text.lower()
+    if any(w in t for w in _HIGH_KEYWORDS):
+        return "high"
+    if any(w in t for w in _LOW_KEYWORDS):
+        return "low"
+    return "medium"
+
+
+def _gemini_model(name: str = "gemini-2.5-flash"):
+    if not _GENAI_AVAILABLE or genai is None:
+        raise RuntimeError("google-generativeai not installed")
+    return genai.GenerativeModel(name)
 
 
 class AIService:
-    def __init__(self):
-        # Aquí se configurarían las APIs de IA (OpenAI, Google Cloud AI, etc.)
-        self.enabled = os.getenv("AI_ENABLED", "false").lower() == "true"
-    
-    async def transcribe_audio(self, audio_file_path: str) -> Optional[str]:
-        """
-        Transcribir audio a texto
-        
-        Args:
-            audio_file_path: Path al archivo de audio
-            
-        Returns:
-            Texto transcrito o None
-            
-        TODO: Integrar con Whisper API, Google Speech-to-Text, etc.
-        """
+    def __init__(self) -> None:
+        self.enabled = _AI_ENABLED_ENV and _GENAI_AVAILABLE and bool(_GEMINI_API_KEY)
+
+    # ── Audio transcription ────────────────────────────────────────────────────
+
+    async def transcribe_audio(self, audio_bytes: bytes, mime_type: str = "audio/m4a") -> str:
+        """Transcribe audio bytes via Gemini and return cleaned text."""
         if not self.enabled:
-            return "Transcripción deshabilitada (modo demo)"
-        
-        # Placeholder para futura integración
-        # Ejemplo con OpenAI Whisper:
-        # client = OpenAI()
-        # with open(audio_file_path, "rb") as audio_file:
-        #     transcription = client.audio.transcriptions.create(
-        #         model="whisper-1",
-        #         file=audio_file
-        #     )
-        # return transcription.text
-        
-        return "Audio transcription placeholder text"
-    
-    async def classify_incident(
-        self, 
-        description: str, 
-        image_url: Optional[str] = None
-    ) -> Dict[str, any]:
-        """
-        Clasificar tipo de incidente basado en descripción e imagen
-        
-        Args:
-            description: Descripción del incidente
-            image_url: URL de imagen (opcional)
-            
-        Returns:
-            Dict con 'classification', 'priority', 'confidence'
-            
-        TODO: Integrar con modelo de clasificación
-        """
+            return "Transcripción de audio no disponible (IA deshabilitada)"
+
+        try:
+            b64 = base64.b64encode(audio_bytes).decode()
+            model = _gemini_model()
+            response = model.generate_content([
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": b64,
+                            }
+                        },
+                        (
+                            "Eres un asistente de emergencias vehiculares. "
+                            "Transcribe el audio y redacta una descripción clara y concisa "
+                            "del incidente vehicular. Responde SOLO con la descripción en español, "
+                            "sin prefijos ni explicaciones extra."
+                        ),
+                    ],
+                }
+            ])
+            return response.text.strip()
+        except Exception as exc:
+            return f"[Error transcripción: {exc}]"
+
+    # ── Image analysis ─────────────────────────────────────────────────────────
+
+    async def analyze_image_bytes(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+        """Describe visible vehicle damage/problem from raw image bytes."""
         if not self.enabled:
-            return {
-                "classification": "general",
-                "priority": "medium",
-                "confidence": 0.0
-            }
-        
-        # Placeholder lógica de clasificación simple basada en keywords
-        description_lower = description.lower()
-        
-        # Classify based on keywords
-        if any(word in description_lower for word in ["llanta", "ponchadura", "neumático", "rueda"]):
-            classification = "tire"
-            priority = "medium"
-        elif any(word in description_lower for word in ["batería", "no enciende", "arrancar"]):
-            classification = "battery"
-            priority = "high"
-        elif any(word in description_lower for word in ["motor", "humo", "sobrecalentamiento"]):
-            classification = "engine"
-            priority = "high"
-        elif any(word in description_lower for word in ["frenos", "frenado"]):
-            classification = "brakes"
-            priority = "high"
-        elif any(word in description_lower for word in ["gasolina", "combustible", "tanque"]):
-            classification = "fuel"
-            priority = "low"
+            return "Análisis de imagen no disponible (IA deshabilitada)"
+
+        try:
+            b64 = base64.b64encode(image_bytes).decode()
+            model = _gemini_model()
+            response = model.generate_content([
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": b64,
+                            }
+                        },
+                        (
+                            "Eres un mecánico experto. Analiza la imagen del vehículo y describe "
+                            "claramente qué problema o daño se observa, qué parte está afectada "
+                            "y qué tan grave parece. Responde SOLO con la descripción técnica "
+                            "en español, sin saludos ni prefijos."
+                        ),
+                    ],
+                }
+            ])
+            return response.text.strip()
+        except Exception as exc:
+            return f"[Error análisis imagen: {exc}]"
+
+    # ── Priority classification ────────────────────────────────────────────────
+
+    async def classify_priority(self, text: str) -> str:
+        """Return 'low', 'medium', or 'high' with Gemini + keyword fallback."""
+        if not self.enabled:
+            return _rule_priority(text)
+
+        try:
+            model = _gemini_model()
+            prompt = (
+                "Clasifica la prioridad de esta emergencia vehicular. "
+                "Responde ÚNICAMENTE con una sola palabra en minúscula: low, medium o high. "
+                "Usa high para: accidentes, incendios, sin frenos, vehículo inmovilizado en carretera rápida. "
+                "Usa low para: sin gasolina, llave adentro, faro fundido, llanta baja (no en carretera). "
+                "Usa medium para todo lo demás.\n\n"
+                f"Descripción: {text}"
+            )
+            response = model.generate_content(prompt)
+            raw = response.text.strip().lower()
+            match = re.search(r"\b(low|medium|high)\b", raw)
+            return match.group(1) if match else _rule_priority(text)
+        except Exception:
+            return _rule_priority(text)
+
+    # ── Summary generation ─────────────────────────────────────────────────────
+
+    async def generate_final_summary(self, audio_desc: str, image_desc: str) -> str:
+        """Combine audio + image descriptions into a unified incident summary."""
+        if not self.enabled:
+            combined = " | ".join(filter(None, [audio_desc, image_desc]))
+            return combined[:300] if combined else "Sin descripción"
+
+        try:
+            model = _gemini_model()
+            parts = []
+            if audio_desc:
+                parts.append(f"Descripción por voz: {audio_desc}")
+            if image_desc:
+                parts.append(f"Análisis de imagen: {image_desc}")
+            combined = "\n".join(parts) or "Sin información"
+
+            prompt = (
+                "Eres un despachador de emergencias vehiculares. "
+                "Redacta un resumen final claro y conciso del incidente "
+                "combinando la siguiente información. "
+                "Máximo 3 oraciones mencionando tipo de problema, gravedad y contexto. "
+                "Responde SOLO con el resumen en español.\n\n"
+                f"{combined}"
+            )
+            response = model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as exc:
+            return audio_desc or image_desc or f"[Error resumen: {exc}]"
+
+    # ── File-based pipeline helpers ────────────────────────────────────────────
+
+    async def process_audio_file(self, audio_bytes: bytes, mime_type: str = "audio/m4a") -> Dict:
+        """Transcribe audio and classify priority. Returns {'description', 'priority'}."""
+        description = await self.transcribe_audio(audio_bytes, mime_type)
+        priority = await self.classify_priority(description)
+        return {"description": description, "priority": priority}
+
+    async def process_image_file(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> Dict:
+        """Describe image and classify priority. Returns {'description', 'priority'}."""
+        description = await self.analyze_image_bytes(image_bytes, mime_type)
+        priority = await self.classify_priority(description)
+        return {"description": description, "priority": priority}
+
+    # ── Legacy compatibility (used by existing incidents router) ───────────────
+
+    async def classify_incident(self, description: str, image_url: Optional[str] = None) -> Dict:
+        priority = await self.classify_priority(description)
+        dl = description.lower()
+        if any(w in dl for w in ["llanta", "neumático", "ponchadura", "rueda"]):
+            cls = "tire"
+        elif any(w in dl for w in ["batería", "no enciende", "no arranca"]):
+            cls = "battery"
+        elif any(w in dl for w in ["motor", "humo", "sobrecalentamiento"]):
+            cls = "engine"
+        elif any(w in dl for w in ["frenos", "frenado"]):
+            cls = "brakes"
+        elif any(w in dl for w in ["gasolina", "combustible", "tanque"]):
+            cls = "fuel"
         else:
-            classification = "general"
-            priority = "medium"
-        
-        return {
-            "classification": classification,
-            "priority": priority,
-            "confidence": 0.75  # Mock confidence score
-        }
-    
-    async def analyze_image(self, image_url: str) -> Optional[Dict]:
-        """
-        Analizar imagen para detectar tipo de problema
-        
-        Args:
-            image_url: URL de la imagen
-            
-        Returns:
-            Dict con análisis de la imagen
-            
-        TODO: Integrar con Vision API (Google Cloud Vision, OpenAI GPT-4 Vision, etc.)
-        """
-        if not self.enabled:
-            return {
-                "objects_detected": [],
-                "description": "Análisis de imagen deshabilitado"
-            }
-        
-        # Placeholder
-        # Ejemplo con OpenAI Vision:
-        # response = client.chat.completions.create(
-        #     model="gpt-4-vision-preview",
-        #     messages=[{
-        #         "role": "user",
-        #         "content": [
-        #             {"type": "text", "text": "What's in this image related to car problems?"},
-        #             {"type": "image_url", "image_url": {"url": image_url}}
-        #         ]
-        #     }]
-        # )
-        # return response.choices[0].message.content
-        
-        return {
-            "objects_detected": ["vehicle", "damage"],
-            "description": "Image analysis placeholder"
-        }
-    
+            cls = "general"
+        return {"classification": cls, "priority": priority, "confidence": 0.9 if self.enabled else 0.5}
+
+    async def analyze_image(self, image_url: str) -> Dict:
+        return {"objects_detected": [], "description": "N/A (URL-based analysis not supported)"}
+
     async def generate_summary(self, incident_data: Dict) -> str:
-        """
-        Generar resumen inteligente del incidente
-        
-        Args:
-            incident_data: Datos del incidente
-            
-        Returns:
-            Resumen generado
-        """
-        if not self.enabled:
-            description = incident_data.get("description", "")
-            classification = incident_data.get("classification", "general")
-            return f"Incidente de tipo {classification}: {description[:100]}..."
-        
-        # Placeholder para generación con LLM
-        # Ejemplo con OpenAI:
-        # response = client.chat.completions.create(
-        #     model="gpt-3.5-turbo",
-        #     messages=[{
-        #         "role": "system",
-        #         "content": "You are a helpful assistant that summarizes vehicle incidents."
-        #     }, {
-        #         "role": "user",
-        #         "content": f"Summarize this incident: {incident_data}"
-        #     }]
-        # )
-        # return response.choices[0].message.content
-        
-        return f"Summary: {incident_data.get('description', 'No description')}"
-    
+        return incident_data.get("description", "")[:200]
+
     async def process_incident_creation(
         self,
         description: str,
         image_url: Optional[str] = None,
-        audio_url: Optional[str] = None
+        audio_url: Optional[str] = None,
     ) -> Dict:
-        """
-        Procesar creación de incidente con análisis de IA
-        
-        Esta es la función principal que se llamará al crear un incidentesde la app móvil.
-        
-        Args:
-            description: Descripción del problema
-            image_url: URL de imagen (opcional)
-            audio_url: URL de audio (opcional)
-            
-        Returns:
-            Dict con classification, priority, ai_summary
-        """
-        # Transcribir audio si existe
-        audio_text = None
-        if audio_url:
-            audio_text = await self.transcribe_audio(audio_url)
-            if audio_text:
-                description = f"{description}\n[Audio]: {audio_text}"
-        
-        # Clasificar incidente
         classification_result = await self.classify_incident(description, image_url)
-        
-        # Analizar imagen si existe
-        image_analysis = None
-        if image_url:
-            image_analysis = await self.analyze_image(image_url)
-        
-        # Generar resumen
-        incident_data = {
-            "description": description,
-            "classification": classification_result["classification"],
-            "image_analysis": image_analysis
-        }
-        summary = await self.generate_summary(incident_data)
-        
         return {
             "classification": classification_result["classification"],
             "priority": classification_result["priority"],
-            "ai_summary": summary,
-            "confidence": classification_result["confidence"]
+            "ai_summary": description[:200],
+            "confidence": classification_result["confidence"],
         }
 
 
-# Singleton instance
+# Singleton instance (kept at end for backward compat)
 ai_service = AIService()
+

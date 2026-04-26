@@ -12,6 +12,7 @@ export class AdminRentalManagementComponent implements OnInit {
   vehicles: RentalVehicle[] = [];
   loading = false;
   error = '';
+  sidebarOpen = true;
   successMessage = '';
   editingVehicleId: number | null = null;
   editForm: Partial<RentalVehicle> = {};
@@ -37,6 +38,8 @@ export class AdminRentalManagementComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.sidebarOpen = typeof window !== 'undefined' ? window.innerWidth > 900 : true;
+
     if (this.authService.currentUserValue?.role !== 'admin') {
       this.router.navigate(['/dashboard']);
       return;
@@ -162,5 +165,13 @@ export class AdminRentalManagementComponent implements OnInit {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/login']);
+  }
+
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  get currentUser() {
+    return this.authService.currentUserValue;
   }
 }

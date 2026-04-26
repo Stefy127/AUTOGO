@@ -16,10 +16,18 @@ class UserRole(str, enum.Enum):
 
 class IncidentStatus(str, enum.Enum):
     PENDING = "pending"
+    WAITING_OFFERS = "waiting_offers"
+    ASSIGNED = "assigned"
     ACCEPTED = "accepted"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class OfferStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 class IncidentPriority(str, enum.Enum):
@@ -31,6 +39,7 @@ class IncidentPriority(str, enum.Enum):
 class PaymentMethod(str, enum.Enum):
     CASH = "cash"
     TRANSFER = "transfer"
+    QR = "qr"
 
 
 class VehicleType(str, enum.Enum):
@@ -94,6 +103,24 @@ class Workshop(Base):
     owner = relationship("User", back_populates="owned_workshops")
     technicians = relationship("Technician", back_populates="workshop", cascade="all, delete-orphan")
     incidents = relationship("Incident", back_populates="workshop")
+    offers = relationship("Offer", back_populates="workshop", cascade="all, delete-orphan")
+    payment_qr = relationship(
+        "WorkshopPaymentQR",
+        back_populates="workshop",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+
+class WorkshopPaymentQR(Base):
+    __tablename__ = "workshop_payment_qr"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workshop_id = Column(Integer, ForeignKey("workshops.id"), unique=True, nullable=False)
+    qr_image_url = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    workshop = relationship("Workshop", back_populates="payment_qr")
 
 
 class Technician(Base):
@@ -104,6 +131,9 @@ class Technician(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     name = Column(String, nullable=False)
     phone = Column(String, nullable=True)
+    access_code = Column(String, nullable=True, index=True)
+    access_code_expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     is_available = Column(Boolean, default=True, nullable=False)
     current_latitude = Column(Float, nullable=True)
     current_longitude = Column(Float, nullable=True)
@@ -113,6 +143,8 @@ class Technician(Base):
     # Relationships
     workshop = relationship("Workshop", back_populates="technicians")
     assigned_incidents = relationship("Incident", back_populates="technician")
+    offers = relationship("Offer", back_populates="technician")
+    access_sessions = relationship("TechnicianAccessSession", back_populates="technician", cascade="all, delete-orphan")
 
 
 class Vehicle(Base):
@@ -161,6 +193,7 @@ class Incident(Base):
     description = Column(Text, nullable=False)
     status = Column(Enum(IncidentStatus), default=IncidentStatus.PENDING, nullable=False)
     priority = Column(Enum(IncidentPriority), default=IncidentPriority.MEDIUM, nullable=False)
+    payment_method = Column(Enum(PaymentMethod), nullable=True)
     
     # Location
     latitude = Column(Float, nullable=True)
@@ -191,6 +224,27 @@ class Incident(Base):
     technician = relationship("Technician", back_populates="assigned_incidents")
     history = relationship("IncidentHistory", back_populates="incident", cascade="all, delete-orphan")
     payment = relationship("Payment", back_populates="incident", uselist=False, cascade="all, delete-orphan")
+    offers = relationship("Offer", back_populates="incident", cascade="all, delete-orphan")
+
+
+class Offer(Base):
+    __tablename__ = "offers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False, index=True)
+    workshop_id = Column(Integer, ForeignKey("workshops.id"), nullable=False, index=True)
+    technician_id = Column(Integer, ForeignKey("technicians.id"), nullable=True)
+    amount = Column(Numeric(10, 2), nullable=False)
+    estimated_arrival_time = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+    status = Column(Enum(OfferStatus), default=OfferStatus.PENDING, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    incident = relationship("Incident", back_populates="offers")
+    workshop = relationship("Workshop", back_populates="offers")
+    technician = relationship("Technician", back_populates="offers")
 
 
 class IncidentHistory(Base):
@@ -236,3 +290,15 @@ class Payment(Base):
 
     # Relationships
     incident = relationship("Incident", back_populates="payment")
+
+
+class TechnicianAccessSession(Base):
+    __tablename__ = "technician_access_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    technician_id = Column(Integer, ForeignKey("technicians.id", ondelete="CASCADE"), nullable=False, index=True)
+    access_token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    technician = relationship("Technician", back_populates="access_sessions")

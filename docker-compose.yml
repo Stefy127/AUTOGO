@@ -33,6 +33,10 @@ services:
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       ENVIRONMENT: development
+      AI_ENABLED: "true"
+      GEMINI_API_KEY: AIzaSyAQqvPfPhfIIgasZkBIXbnJRXBt_xc90sA
+      MAPBOX_API_KEY: pk.eyJ1IjoiYW5nZWxtb3JhMzciLCJhIjoiY21uczVzemtqMGEwbTJzcTA5NGJuODk4eSJ9.N1m0wsLi4oNu-dmRDG4z1w
+      MAX_WORKSHOP_DISTANCE_KM: "50"
     depends_on:
       postgres:
         condition: service_healthy

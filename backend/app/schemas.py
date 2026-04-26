@@ -14,10 +14,18 @@ class UserRole(str, Enum):
 
 class IncidentStatus(str, Enum):
     PENDING = "pending"
+    WAITING_OFFERS = "waiting_offers"
+    ASSIGNED = "assigned"
     ACCEPTED = "accepted"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class OfferStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 class IncidentPriority(str, Enum):
@@ -29,6 +37,7 @@ class IncidentPriority(str, Enum):
 class PaymentMethod(str, Enum):
     CASH = "cash"
     TRANSFER = "transfer"
+    QR = "qr"
 
 
 class VehicleType(str, Enum):
@@ -68,6 +77,12 @@ class UserSelfUpdate(BaseModel):
     password: Optional[str] = None
 
 
+class UserProfileUpdate(BaseModel):
+    email: EmailStr
+    full_name: str
+    phone: Optional[str] = None
+
+
 class AdminUserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
@@ -86,6 +101,14 @@ class VehicleBase(BaseModel):
 
 class VehicleCreate(VehicleBase):
     pass
+
+
+class VehicleUpdate(BaseModel):
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[int] = Field(default=None, ge=1900, le=2100)
+    plate: Optional[str] = None
+    color: Optional[str] = None
 
 
 class VehicleResponse(VehicleBase):
@@ -160,6 +183,7 @@ class IncidentResponse(IncidentBase):
     vehicle_id: int
     status: IncidentStatus
     priority: IncidentPriority
+    payment_method: Optional[PaymentMethod] = None
     workshop_id: Optional[int] = None
     technician_id: Optional[int] = None
     classification: Optional[str] = None
@@ -175,6 +199,7 @@ class IncidentResponse(IncidentBase):
     workshop: Optional['WorkshopResponse'] = None
     technician: Optional['TechnicianResponse'] = None
     payment: Optional['PaymentResponse'] = None
+    offers: list['OfferResponse'] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -184,6 +209,36 @@ class IncidentAccept(BaseModel):
     """Schema para aceptar incidente con técnico y tarifa"""
     technician_id: int
     estimated_amount: float = Field(..., gt=0, description="Monto estimado del servicio")
+
+
+class OfferCreate(BaseModel):
+    incident_id: int
+    amount: float = Field(..., gt=0)
+    technician_id: Optional[int] = None
+    estimated_arrival_time: Optional[int] = Field(default=None, ge=1)
+    notes: Optional[str] = None
+
+
+class OfferAccept(BaseModel):
+    technician_id: Optional[int] = None
+
+
+class OfferResponse(BaseModel):
+    id: int
+    incident_id: int
+    workshop_id: int
+    technician_id: Optional[int] = None
+    amount: float
+    estimated_arrival_time: Optional[int] = None
+    notes: Optional[str] = None
+    status: OfferStatus
+    created_at: datetime
+    updated_at: datetime
+    workshop: Optional['WorkshopResponse'] = None
+    technician: Optional['TechnicianResponse'] = None
+
+    class Config:
+        from_attributes = True
 
 
 # Token Schemas
@@ -230,6 +285,19 @@ class WorkshopResponse(WorkshopBase):
         from_attributes = True
 
 
+class WorkshopPaymentQRUpsert(BaseModel):
+    qr_image_url: str
+
+
+class WorkshopPaymentQRResponse(BaseModel):
+    workshop_id: int
+    qr_image_url: str
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # Technician Schemas
 class TechnicianBase(BaseModel):
     name: str
@@ -262,6 +330,9 @@ class TechnicianResponse(TechnicianBase):
     id: int
     workshop_id: int
     user_id: Optional[int] = None
+    access_code: Optional[str] = None
+    access_code_expires_at: Optional[datetime] = None
+    is_active: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -286,6 +357,34 @@ class PaymentUpdate(BaseModel):
     paid_at: Optional[datetime] = None
     reference_number: Optional[str] = None
     notes: Optional[str] = None
+
+
+class PaymentQRConfirm(BaseModel):
+    reference_number: Optional[str] = None
+
+
+class TechnicianAccessRequest(BaseModel):
+    code: str
+    name: str
+
+
+class TechnicianAccessResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    technician_id: int
+    technician_name: str
+    workshop_id: int
+    workshop_name: str
+    expires_at: Optional[datetime] = None
+
+
+class TechnicianIncidentStatusUpdate(BaseModel):
+    status: IncidentStatus
+
+
+class TechnicianPaymentConfirm(BaseModel):
+    incident_id: int
+    payment_method: PaymentMethod
 
 
 class PaymentResponse(PaymentBase):

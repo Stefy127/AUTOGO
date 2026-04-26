@@ -1,14 +1,20 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Query
+from sqlalchemy.orm import Session, joinedload
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta
+from io import BytesIO
+
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import simpleSplit
+from reportlab.pdfgen import canvas
 
 from app.database import get_db
-from app.models import User, Workshop, Technician, Incident, IncidentStatus, IncidentHistory, UserRole, Payment, PaymentMethod
+from app.models import User, Workshop, Technician, Incident, IncidentStatus, IncidentHistory, UserRole, Payment, PaymentMethod, WorkshopPaymentQR, Offer
 from app.schemas import (
     WorkshopCreate, WorkshopResponse, WorkshopUpdate,
     TechnicianCreate, TechnicianCreateSimple, TechnicianResponse,
-    IncidentResponse, IncidentAccept
+    IncidentResponse, IncidentAccept,
+    WorkshopPaymentQRUpsert, WorkshopPaymentQRResponse
 )
 from app.auth import get_current_user
 from app.services.assignment_service import AssignmentService
@@ -237,6 +243,107 @@ async def get_my_technicians(
     return technicians
 
 
+@router.get("/me/payment-qr", response_model=WorkshopPaymentQRResponse)
+async def get_my_payment_qr(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.WORKSHOP:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo usuarios con rol WORKSHOP pueden gestionar su QR"
+        )
+
+    workshop = db.query(Workshop).filter(Workshop.owner_id == current_user.id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró un taller para este usuario"
+        )
+
+    payment_qr = db.query(WorkshopPaymentQR).filter(WorkshopPaymentQR.workshop_id == workshop.id).first()
+    if not payment_qr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Este taller aún no configuró su QR de pago"
+        )
+
+    return payment_qr
+
+
+@router.put("/me/payment-qr", response_model=WorkshopPaymentQRResponse)
+async def upsert_my_payment_qr(
+    qr_data: WorkshopPaymentQRUpsert,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.WORKSHOP:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo usuarios con rol WORKSHOP pueden gestionar su QR"
+        )
+
+    workshop = db.query(Workshop).filter(Workshop.owner_id == current_user.id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró un taller para este usuario"
+        )
+
+    payment_qr = db.query(WorkshopPaymentQR).filter(WorkshopPaymentQR.workshop_id == workshop.id).first()
+    if payment_qr:
+        payment_qr.qr_image_url = qr_data.qr_image_url
+    else:
+        payment_qr = WorkshopPaymentQR(
+            workshop_id=workshop.id,
+            qr_image_url=qr_data.qr_image_url
+        )
+        db.add(payment_qr)
+
+    db.commit()
+    db.refresh(payment_qr)
+    return payment_qr
+
+
+@router.get("/{workshop_id}/payment-qr", response_model=WorkshopPaymentQRResponse)
+async def get_workshop_payment_qr(
+    workshop_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    workshop = db.query(Workshop).filter(Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Taller no encontrado"
+        )
+
+    if current_user.role == UserRole.CLIENT:
+        incident = db.query(Incident).filter(
+            Incident.user_id == current_user.id,
+            Incident.workshop_id == workshop_id
+        ).first()
+        if not incident:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para consultar este QR"
+            )
+    elif current_user.role == UserRole.WORKSHOP and workshop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para consultar este QR"
+        )
+
+    payment_qr = db.query(WorkshopPaymentQR).filter(WorkshopPaymentQR.workshop_id == workshop_id).first()
+    if not payment_qr:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Este taller no tiene QR configurado"
+        )
+
+    return payment_qr
+
+
 # ==================== INCIDENT MANAGEMENT ====================
 
 @router.get("/incidents/available", response_model=List[IncidentResponse])
@@ -262,9 +369,14 @@ async def get_available_incidents(
             detail="No se encontró un taller para este usuario"
         )
     
-    # Obtener incidentes pendientes sin asignar
-    incidents = db.query(Incident).filter(
-        Incident.status == IncidentStatus.PENDING,
+    # Obtener incidentes abiertos (sin asignación final)
+    incidents = db.query(Incident).options(
+        joinedload(Incident.user),
+        joinedload(Incident.vehicle),
+        joinedload(Incident.offers).joinedload(Offer.workshop),
+        joinedload(Incident.offers).joinedload(Offer.technician)
+    ).filter(
+        Incident.status.in_([IncidentStatus.PENDING, IncidentStatus.WAITING_OFFERS]),
         Incident.workshop_id.is_(None)
     ).all()
     
@@ -307,6 +419,12 @@ async def accept_incident(
             detail="Incidente no encontrado"
         )
     
+    if incident.status in [IncidentStatus.PENDING, IncidentStatus.WAITING_OFFERS]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La aceptación directa fue deshabilitada. Usa POST /offers para enviar una oferta."
+        )
+
     if incident.status != IncidentStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -517,3 +635,151 @@ async def get_workshop_stats(
         "total_technicians": total_technicians,
         "available_technicians": available_technicians
     }
+
+
+@router.get("/me/reports/incidents/pdf")
+async def download_incidents_report_pdf(
+    start_date: str | None = Query(default=None, description="Fecha inicio (YYYY-MM-DD)"),
+    end_date: str | None = Query(default=None, description="Fecha fin (YYYY-MM-DD)"),
+    technician_id: int | None = Query(default=None, description="ID de mecánico"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Descarga un reporte PDF de emergencias atendidas por el taller.
+    Permite filtrar por rango de fechas y/o mecánico.
+    """
+    if current_user.role != UserRole.WORKSHOP:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo usuarios con rol WORKSHOP pueden generar reportes"
+        )
+
+    workshop = db.query(Workshop).filter(Workshop.owner_id == current_user.id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No se encontró un taller para este usuario"
+        )
+
+    parsed_start: datetime | None = None
+    parsed_end_exclusive: datetime | None = None
+
+    try:
+        if start_date:
+            parsed_start = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            parsed_end_exclusive = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de fecha inválido. Usa YYYY-MM-DD"
+        )
+
+    query = db.query(Incident).filter(
+        Incident.workshop_id == workshop.id,
+        Incident.status == IncidentStatus.COMPLETED
+    )
+
+    if technician_id is not None:
+        technician = db.query(Technician).filter(
+            Technician.id == technician_id,
+            Technician.workshop_id == workshop.id
+        ).first()
+        if not technician:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mecánico no encontrado para este taller"
+            )
+        query = query.filter(Incident.technician_id == technician_id)
+
+    if parsed_start is not None:
+        query = query.filter(Incident.completed_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        query = query.filter(Incident.completed_at < parsed_end_exclusive)
+
+    incidents = query.order_by(Incident.completed_at.desc(), Incident.id.desc()).all()
+
+    # Build PDF
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    y = height - 40
+
+    def new_page() -> None:
+        nonlocal y
+        pdf.showPage()
+        y = height - 40
+
+    title = f"Reporte de Emergencias Atendidas - {workshop.name}"
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(40, y, title)
+    y -= 20
+
+    pdf.setFont("Helvetica", 10)
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    pdf.drawString(40, y, f"Generado: {generated_at}")
+    y -= 14
+    pdf.drawString(40, y, f"Filtros -> inicio: {start_date or 'N/A'} | fin: {end_date or 'N/A'} | mecanico_id: {technician_id or 'N/A'}")
+    y -= 20
+
+    total_amount = 0.0
+    total_earnings = 0.0
+
+    if not incidents:
+        pdf.setFont("Helvetica", 11)
+        pdf.drawString(40, y, "No hay emergencias completadas con los filtros seleccionados.")
+    else:
+        for incident in incidents:
+            if y < 90:
+                new_page()
+
+            mechanic_name = incident.technician.name if incident.technician else "-"
+            client_name = incident.user.full_name if incident.user else "-"
+            completed_at = incident.completed_at.strftime("%Y-%m-%d %H:%M") if incident.completed_at else "-"
+
+            amount = incident.payment.amount if incident.payment else 0.0
+            earnings = incident.payment.workshop_earnings if incident.payment else 0.0
+            payment_method = incident.payment.payment_method.value if incident.payment else "-"
+
+            total_amount += float(amount)
+            total_earnings += float(earnings)
+
+            pdf.setFont("Helvetica-Bold", 10)
+            pdf.drawString(40, y, f"#{incident.id} | {completed_at} | Mecánico: {mechanic_name}")
+            y -= 13
+
+            pdf.setFont("Helvetica", 9)
+            pdf.drawString(40, y, f"Cliente: {client_name} | Metodo pago: {payment_method} | Cobrado: ${amount:.2f} | Ganancia: ${earnings:.2f}")
+            y -= 12
+
+            desc = incident.description or "Sin descripción"
+            wrapped_desc = simpleSplit(f"Descripción: {desc}", "Helvetica", 9, width - 80)
+            for line in wrapped_desc[:4]:
+                if y < 80:
+                    new_page()
+                pdf.drawString(40, y, line)
+                y -= 11
+
+            y -= 8
+
+    if y < 80:
+        new_page()
+
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(40, y, f"Total emergencias: {len(incidents)}")
+    y -= 14
+    pdf.drawString(40, y, f"Total cobrado: ${total_amount:.2f}")
+    y -= 14
+    pdf.drawString(40, y, f"Total ganancia taller: ${total_earnings:.2f}")
+
+    pdf.save()
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    filename = f"reporte_emergencias_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
