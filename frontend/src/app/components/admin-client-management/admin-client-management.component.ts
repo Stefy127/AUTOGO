@@ -13,6 +13,7 @@ export class AdminClientManagementComponent implements OnInit {
   users: User[] = [];
   loading = false;
   error = '';
+  sidebarOpen = true;
   editingUserId: number | null = null;
   editForm: Partial<User> = {};
 
@@ -23,6 +24,8 @@ export class AdminClientManagementComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.sidebarOpen = typeof window !== 'undefined' ? window.innerWidth > 900 : true;
+
     if (this.authService.currentUserValue?.role !== 'admin') {
       this.router.navigate(['/dashboard']);
       return;
@@ -87,5 +90,13 @@ export class AdminClientManagementComponent implements OnInit {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/login']);
+  }
+
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  get currentUser() {
+    return this.authService.currentUserValue;
   }
 }

@@ -5,8 +5,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.database import get_db
-from app.models import User, Payment, Incident, Workshop, UserRole, IncidentStatus
-from app.schemas import PaymentCreate, PaymentResponse, PaymentUpdate
+from app.models import User, Payment, Incident, Workshop, UserRole, IncidentStatus, PaymentMethod, WorkshopPaymentQR
+from app.schemas import PaymentCreate, PaymentResponse, PaymentUpdate, PaymentQRConfirm
 from app.auth import get_current_user
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -198,6 +198,65 @@ async def update_payment(
     db.commit()
     db.refresh(payment)
     
+    return payment
+
+
+@router.post("/incident/{incident_id}/pay-qr", response_model=PaymentResponse)
+async def pay_incident_with_qr(
+    incident_id: int,
+    payment_data: PaymentQRConfirm,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.CLIENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo clientes pueden confirmar pagos QR"
+        )
+
+    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    if not incident or incident.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente no encontrado"
+        )
+
+    if incident.status != IncidentStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo puedes pagar incidentes completados"
+        )
+
+    payment = db.query(Payment).filter(Payment.incident_id == incident_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No existe un pago asociado a este incidente"
+        )
+
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este incidente ya fue pagado"
+        )
+
+    payment_qr = db.query(WorkshopPaymentQR).filter(
+        WorkshopPaymentQR.workshop_id == incident.workshop_id
+    ).first()
+    if not payment_qr:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El taller no tiene QR configurado"
+        )
+
+    payment.payment_method = PaymentMethod.QR
+    payment.reference_number = payment_data.reference_number or f"AG-QR-{incident_id}-{int(datetime.utcnow().timestamp())}"
+    payment.is_paid = True
+    payment.paid_at = datetime.utcnow()
+    payment.notes = "Pago QR confirmado por cliente"
+
+    db.commit()
+    db.refresh(payment)
     return payment
 
 

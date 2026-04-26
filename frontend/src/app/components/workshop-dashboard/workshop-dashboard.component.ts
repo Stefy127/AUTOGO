@@ -12,6 +12,7 @@ import { LocationData } from '../map-picker/map-picker.component';
   styleUrls: ['./workshop-dashboard.component.css']
 })
 export class WorkshopDashboardComponent implements OnInit {
+  sidebarOpen = true;
   workshop: Workshop | null = null;
   technicians: Technician[] = [];
   availableIncidents: Incident[] = [];
@@ -21,6 +22,7 @@ export class WorkshopDashboardComponent implements OnInit {
   
   loading = true;
   error = '';
+  successMessage = '';
 
   workshopForm = {
     name: '',
@@ -35,16 +37,33 @@ export class WorkshopDashboardComponent implements OnInit {
     phone: ''
   };
 
+  editingTechnicianId: number | null = null;
+  technicianEditForm = {
+    name: '',
+    phone: '',
+    is_available: true
+  };
+
+  workshopQrImageUrl = '';
+  workshopQrPreviewData = '';
+
   // Accept incident modal state
   showAcceptModal = false;
   selectedIncident: Incident | null = null;
   acceptForm = {
     technician_id: undefined as number | undefined,
-    estimated_amount: undefined as number | undefined
+    amount: undefined as number | undefined
   };
 
   // Navigation state
-  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' = 'dashboard';
+  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' = 'dashboard';
+
+  reportFilters = {
+    startDate: '',
+    endDate: '',
+    technicianId: undefined as number | undefined
+  };
+  downloadingReport = false;
 
   constructor(
     private authService: AuthService,
@@ -54,7 +73,12 @@ export class WorkshopDashboardComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.sidebarOpen = typeof window !== 'undefined' ? window.innerWidth > 768 : true;
     this.loadAllData();
+  }
+
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
   }
 
   loadAllData(): void {
@@ -76,6 +100,7 @@ export class WorkshopDashboardComponent implements OnInit {
         this.loadStats();
         this.loadAvailableIncidents();
         this.loadMyIncidents();
+        this.loadPaymentQr();
         this.loading = false;
       },
       error: (error) => {
@@ -121,6 +146,67 @@ export class WorkshopDashboardComponent implements OnInit {
     });
   }
 
+  loadPaymentQr(): void {
+    this.workshopService.getMyPaymentQr().subscribe({
+      next: (qrConfig) => {
+        this.workshopQrImageUrl = qrConfig.qr_image_url || '';
+        this.workshopQrPreviewData = this.workshopQrImageUrl;
+      },
+      error: () => {
+        this.workshopQrImageUrl = '';
+        this.workshopQrPreviewData = '';
+      }
+    });
+  }
+
+  onQrFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files && input.files.length > 0 ? input.files[0] : null;
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      this.error = 'Solo se permiten archivos de imagen (PNG, JPG, WEBP, etc.)';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Image = reader.result?.toString() || '';
+      if (!base64Image) {
+        this.error = 'No se pudo leer la imagen seleccionada';
+        return;
+      }
+      this.workshopQrImageUrl = base64Image;
+      this.workshopQrPreviewData = base64Image;
+      this.error = '';
+      this.successMessage = '✅ Imagen QR lista para guardar';
+      setTimeout(() => this.successMessage = '', 3000);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  savePaymentQr(): void {
+    if (!this.workshopQrImageUrl.trim()) {
+      this.error = 'Selecciona o ingresa una imagen QR para el taller';
+      return;
+    }
+
+    this.workshopService.saveMyPaymentQr(this.workshopQrImageUrl.trim()).subscribe({
+      next: () => {
+        this.error = '';
+        this.workshopQrPreviewData = this.workshopQrImageUrl;
+        this.successMessage = '✅ QR del taller guardado correctamente';
+        setTimeout(() => this.successMessage = '', 3000);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo guardar el QR del taller';
+      }
+    });
+  }
+
   loadAvailableIncidents(): void {
     this.workshopService.getAvailableIncidents().subscribe({
       next: (incidents) => {
@@ -162,11 +248,65 @@ export class WorkshopDashboardComponent implements OnInit {
     });
   }
 
-  navigateTo(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history'): void {
+  navigateTo(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports'): void {
     this.currentView = view;
     if (view === 'incidents-history') {
       this.loadIncidentHistory();
     }
+  }
+
+  hasIncidentImage(incident: Incident): boolean {
+    const value = incident.image_url || '';
+    return value.startsWith('data:image/') || /^https?:\/\//i.test(value);
+  }
+
+  getMyPendingOffer(incident: Incident) {
+    if (!this.workshop?.id || !incident.offers?.length) {
+      return null;
+    }
+
+    return incident.offers.find(offer =>
+      offer.workshop_id === this.workshop?.id && offer.status === 'pending'
+    ) || null;
+  }
+
+  hasMyPendingOffer(incident: Incident): boolean {
+    return this.getMyPendingOffer(incident) !== null;
+  }
+
+  downloadReportPdf(): void {
+    if (this.reportFilters.startDate && this.reportFilters.endDate && this.reportFilters.startDate > this.reportFilters.endDate) {
+      this.error = 'La fecha inicial no puede ser mayor que la fecha final';
+      return;
+    }
+
+    this.downloadingReport = true;
+    this.error = '';
+
+    this.workshopService.downloadIncidentsReportPdf({
+      startDate: this.reportFilters.startDate || undefined,
+      endDate: this.reportFilters.endDate || undefined,
+      technicianId: this.reportFilters.technicianId || undefined
+    }).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte_emergencias_${new Date().toISOString().slice(0, 10)}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        this.successMessage = '✅ Reporte PDF descargado';
+        setTimeout(() => this.successMessage = '', 3000);
+        this.downloadingReport = false;
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo generar el reporte PDF';
+        this.downloadingReport = false;
+      }
+    });
   }
 
   saveWorkshopInfo(): void {
@@ -239,6 +379,102 @@ export class WorkshopDashboardComponent implements OnInit {
     });
   }
 
+  startEditTechnician(technician: Technician): void {
+    this.editingTechnicianId = technician.id;
+    this.technicianEditForm = {
+      name: technician.name,
+      phone: technician.phone || '',
+      is_available: technician.is_available
+    };
+  }
+
+  cancelEditTechnician(): void {
+    this.editingTechnicianId = null;
+    this.technicianEditForm = {
+      name: '',
+      phone: '',
+      is_available: true
+    };
+  }
+
+  saveTechnician(technicianId: number): void {
+    if (!this.technicianEditForm.name.trim()) {
+      this.error = 'El nombre del mecánico es obligatorio';
+      return;
+    }
+
+    this.workshopService.updateTechnician(technicianId, {
+      name: this.technicianEditForm.name.trim(),
+      phone: this.technicianEditForm.phone.trim() || undefined,
+      is_available: this.technicianEditForm.is_available
+    }).subscribe({
+      next: () => {
+        this.cancelEditTechnician();
+        this.loadTechnicians();
+        this.loadStats();
+        this.error = '';
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo actualizar el técnico';
+      }
+    });
+  }
+
+  toggleTechnicianAvailability(technician: Technician): void {
+    this.workshopService.updateTechnician(technician.id, {
+      is_available: !technician.is_available
+    }).subscribe({
+      next: () => {
+        this.loadTechnicians();
+        this.loadStats();
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo cambiar disponibilidad';
+      }
+    });
+  }
+
+  deleteTechnician(technician: Technician): void {
+    const ok = confirm(`¿Eliminar al mecánico ${technician.name}?`);
+    if (!ok) return;
+
+    this.workshopService.deleteTechnician(technician.id).subscribe({
+      next: () => {
+        this.loadTechnicians();
+        this.loadStats();
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo eliminar el técnico';
+      }
+    });
+  }
+
+  copyAccessCode(code: string): void {
+    navigator.clipboard.writeText(code).then(() => {
+      this.successMessage = '✅ Código copiado al portapapeles';
+      setTimeout(() => this.successMessage = '', 3000);
+    });
+  }
+
+  regenerateAccessCode(technician: Technician): void {
+    const ok = confirm(`¿Regenerar el código de acceso de ${technician.name}? El código anterior dejará de funcionar.`);
+    if (!ok) return;
+
+    this.workshopService.regenerateAccessCode(technician.id).subscribe({
+      next: (updated) => {
+        const idx = this.technicians.findIndex(t => t.id === technician.id);
+        if (idx !== -1) {
+          this.technicians[idx] = { ...this.technicians[idx], ...updated };
+        }
+        this.successMessage = `✅ Código regenerado para ${technician.name}`;
+        setTimeout(() => this.successMessage = '', 4000);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo regenerar el código';
+      }
+    });
+  }
+
   // Calculate total earnings from completed incidents
   getTotalEarnings(): number {
     return this.myIncidents
@@ -275,36 +511,35 @@ export class WorkshopDashboardComponent implements OnInit {
     // Reset form
     this.acceptForm = {
       technician_id: this.technicians.length > 0 ? this.technicians[0].id : undefined,
-      estimated_amount: undefined
+      amount: undefined
     };
   }
 
   confirmAcceptIncident(): void {
-    if (!this.selectedIncident?.id || !this.acceptForm.technician_id || !this.acceptForm.estimated_amount) {
+    if (!this.selectedIncident?.id || !this.acceptForm.technician_id || !this.acceptForm.amount) {
       this.error = 'Debes seleccionar un mecánico e ingresar el monto estimado';
       return;
     }
 
-    // Asegurar que estimated_amount sea un número
-    const amount = typeof this.acceptForm.estimated_amount === 'string' 
-      ? parseFloat(this.acceptForm.estimated_amount) 
-      : this.acceptForm.estimated_amount;
+    const amount = typeof this.acceptForm.amount === 'string' 
+      ? parseFloat(this.acceptForm.amount) 
+      : this.acceptForm.amount;
 
     if (isNaN(amount) || amount <= 0) {
       this.error = 'El monto debe ser un número válido mayor que 0';
       return;
     }
 
-    this.workshopService.acceptIncident(
+    this.workshopService.createOffer(
       this.selectedIncident.id, 
       this.acceptForm.technician_id,
       amount
     ).subscribe({
       next: () => {
-        // Remove from available and add to my incidents
-        this.availableIncidents = this.availableIncidents.filter(i => i.id !== this.selectedIncident?.id);
+        this.loadAvailableIncidents();
         this.loadMyIncidents();
         this.loadStats();
+        this.loadTechnicians();
         
         // Close modal
         this.showAcceptModal = false;
@@ -313,7 +548,7 @@ export class WorkshopDashboardComponent implements OnInit {
       },
       error: (error) => {
         console.error('Error al aceptar incidente:', error);
-        this.error = error.error?.detail || 'Error al aceptar la emergencia';
+        this.error = error.error?.detail || 'Error al enviar la oferta';
       }
     });
   }
@@ -323,7 +558,7 @@ export class WorkshopDashboardComponent implements OnInit {
     this.selectedIncident = null;
     this.acceptForm = {
       technician_id: undefined,
-      estimated_amount: undefined
+      amount: undefined
     };
   }
 
@@ -378,6 +613,8 @@ export class WorkshopDashboardComponent implements OnInit {
   getStatusClass(status: string): string {
     const statusMap: { [key: string]: string } = {
       pending: 'badge-pending',
+      waiting_offers: 'badge-pending',
+      assigned: 'badge-accepted',
       accepted: 'badge-accepted',
       in_progress: 'badge-progress',
       completed: 'badge-completed',
@@ -389,6 +626,8 @@ export class WorkshopDashboardComponent implements OnInit {
   getStatusText(status: string): string {
     const statusMap: { [key: string]: string } = {
       pending: 'Pendiente',
+      waiting_offers: 'Esperando Ofertas',
+      assigned: 'Asignada',
       accepted: 'Aceptada',
       in_progress: 'En Proceso',
       completed: 'Completada',
@@ -408,6 +647,16 @@ export class WorkshopDashboardComponent implements OnInit {
       high: '🔴 Alta'
     };
     return priorityMap[priority] || priority;
+  }
+
+  getPaymentMethodText(method?: string): string {
+    const paymentMethod = method || '';
+    const methodMap: { [key: string]: string } = {
+      cash: 'Efectivo',
+      transfer: 'Transferencia',
+      qr: 'QR'
+    };
+    return methodMap[paymentMethod] || 'No definido';
   }
 
   logout(): void {

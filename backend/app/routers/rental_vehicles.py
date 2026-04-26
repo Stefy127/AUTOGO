@@ -23,7 +23,7 @@ def verify_admin(current_user: User):
 
 # ==================== ADMIN ENDPOINTS (CRUD) ====================
 
-@router.post("/", response_model=RentalVehicleResponse)
+@router.post("", response_model=RentalVehicleResponse)
 async def create_rental_vehicle(
     vehicle_data: RentalVehicleCreate,
     db: Session = Depends(get_db),
@@ -43,7 +43,7 @@ async def create_rental_vehicle(
     return new_vehicle
 
 
-@router.get("/", response_model=List[RentalVehicleResponse])
+@router.get("", response_model=List[RentalVehicleResponse])
 async def get_rental_vehicles(
     skip: int = 0,
     limit: int = 100,

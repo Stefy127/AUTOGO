@@ -14,6 +14,7 @@ export class AdminBitacoraComponent implements OnInit {
   logs: AuditLog[] = [];
   loading = false;
   error = '';
+  sidebarOpen = true;
   filterEventType = '';
   filterSection = '';
 
@@ -24,6 +25,8 @@ export class AdminBitacoraComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.sidebarOpen = typeof window !== 'undefined' ? window.innerWidth > 900 : true;
+
     if (this.authService.currentUserValue?.role !== 'admin') {
       this.router.navigate(['/dashboard']);
       return;
@@ -62,5 +65,13 @@ export class AdminBitacoraComponent implements OnInit {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/login']);
+  }
+
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  get currentUser() {
+    return this.authService.currentUserValue;
   }
 }

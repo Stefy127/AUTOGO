@@ -82,6 +82,46 @@ class AuthService with ChangeNotifier {
     }
   }
 
+  Future<bool> refreshUserProfile() async {
+    try {
+      await _loadUserProfile();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<String?> updateProfile({
+    required String fullName,
+    required String email,
+    String? phone,
+  }) async {
+    try {
+      final response = await _apiService.put(
+        '/users/profile',
+        {
+          'full_name': fullName,
+          'email': email,
+          'phone': phone,
+        },
+        token: _token,
+      );
+
+      _currentUser = User.fromJson(response);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('400') && msg.contains('email')) {
+        return 'El email ya está en uso.';
+      }
+      if (msg.contains('422')) {
+        return 'Datos inválidos. Revisa los campos del formulario.';
+      }
+      return 'No se pudo actualizar el perfil.';
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     _currentUser = null;
@@ -92,7 +132,7 @@ class AuthService with ChangeNotifier {
 
   Future<bool> deleteMyAccount() async {
     try {
-      await _apiService.delete('/users/me', token: _token);
+      await _apiService.delete('/users/profile', token: _token);
       await logout();
       return true;
     } catch (e) {

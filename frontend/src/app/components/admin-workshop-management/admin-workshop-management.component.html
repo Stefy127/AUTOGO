@@ -1,5 +1,5 @@
 <div class="dashboard-container">
-  <aside class="sidebar">
+  <aside class="sidebar" [class.closed]="!sidebarOpen">
     <div class="sidebar-header">
       <div class="logo">
         <span class="logo-icon">🚗</span>
@@ -10,41 +10,55 @@
     <nav class="sidebar-nav">
       <a class="nav-item" routerLink="/dashboard">
         <span class="nav-icon">📊</span>
-        <span class="nav-text">Dashboard</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Dashboard</span>
       </a>
       <a class="nav-item active" routerLink="/admin/gestion-talleres">
         <span class="nav-icon">🔧</span>
-        <span class="nav-text">Gestión Talleres</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Gestión Talleres</span>
       </a>
       <a class="nav-item" routerLink="/admin/gestion-clientes">
         <span class="nav-icon">👥</span>
-        <span class="nav-text">Gestión Clientes</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Gestión Clientes</span>
       </a>
       <a class="nav-item" routerLink="/admin/alquiler-autos">
         <span class="nav-icon">🚙</span>
-        <span class="nav-text">Alquiler de Autos</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Alquiler de Autos</span>
       </a>
       <a class="nav-item" routerLink="/admin/bitacora">
         <span class="nav-icon">🧾</span>
-        <span class="nav-text">Bitácora</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Bitácora</span>
       </a>
     </nav>
 
     <div class="sidebar-footer">
-      <button class="btn-logout" (click)="logout()">🚪 Cerrar Sesión</button>
+      <div class="user-profile" *ngIf="currentUser">
+        <div class="user-avatar">{{ currentUser.full_name.charAt(0).toUpperCase() }}</div>
+        <div class="user-info" *ngIf="sidebarOpen">
+          <div class="user-name">{{ currentUser.full_name }}</div>
+          <div class="user-role">Administrador</div>
+        </div>
+      </div>
+      <button class="btn-logout" (click)="logout()" [title]="sidebarOpen ? '' : 'Cerrar Sesión'">
+        <span class="logout-icon">🚪</span>
+        <span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesión</span>
+      </button>
     </div>
   </aside>
 
-  <main class="main-content">
+  <main class="main-content" [class.expanded]="!sidebarOpen">
     <header class="top-bar">
+      <button class="btn-toggle" (click)="toggleSidebar()">☰</button>
       <h1>Gestión Talleres</h1>
     </header>
 
     <section class="content-area">
+      <div class="section-card">
+      <h2 class="section-title">Listado de Talleres</h2>
       <div class="alert" *ngIf="error">{{ error }}</div>
       <p *ngIf="loading">Cargando talleres...</p>
 
-      <table *ngIf="!loading" class="table">
+      <div class="table-wrapper" *ngIf="!loading">
+      <table class="table">
         <thead>
           <tr>
             <th>ID</th>
@@ -80,6 +94,8 @@
           </tr>
         </tbody>
       </table>
+      </div>
+      </div>
     </section>
   </main>
 </div>
