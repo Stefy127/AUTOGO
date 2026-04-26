@@ -41,7 +41,6 @@ export interface RentalVehicleUpdate {
 })
 export class RentalVehiclesService {
   private apiUrl = `${environment.apiUrl}/rental-vehicles`;
-  private collectionUrl = `${this.apiUrl}/`;
 
   constructor(
     private http: HttpClient,
@@ -57,7 +56,7 @@ export class RentalVehiclesService {
 
   // Get all rental vehicles
   getAllRentalVehicles(isActive?: boolean): Observable<RentalVehicle[]> {
-    let url = this.collectionUrl;
+    let url = this.apiUrl;
     if (isActive !== undefined) {
       url += `?is_active=${isActive}`;
     }
@@ -71,7 +70,7 @@ export class RentalVehiclesService {
 
   // Create rental vehicle
   createRentalVehicle(data: RentalVehicleCreate): Observable<RentalVehicle> {
-    return this.http.post<RentalVehicle>(this.collectionUrl, data, { headers: this.getHeaders() });
+    return this.http.post<RentalVehicle>(this.apiUrl, data, { headers: this.getHeaders() });
   }
 
   // Update rental vehicle
