@@ -3,7 +3,7 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
-import { Workshop, Technician, Incident, WorkshopStats, WorkshopPaymentQr, Offer } from '../models/models';
+import { Workshop, Technician, Incident, WorkshopStats, WorkshopPaymentQr, Offer, AppNotification } from '../models/models';
 
 @Injectable({
   providedIn: 'root'
@@ -137,6 +137,29 @@ export class WorkshopService {
     // Get all incidents assigned to this workshop
     return this.http.get<Incident[]>(
       `${this.apiUrl}/incidents`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  getNotifications(onlyUnread = false, limit = 50): Observable<AppNotification[]> {
+    return this.http.get<AppNotification[]>(
+      `${this.apiUrl}/notifications?only_unread=${onlyUnread}&limit=${limit}`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  markNotificationAsRead(notificationId: number): Observable<AppNotification> {
+    return this.http.patch<AppNotification>(
+      `${this.apiUrl}/notifications/${notificationId}/read`,
+      {},
+      { headers: this.getHeaders() }
+    );
+  }
+
+  markAllNotificationsAsRead(): Observable<{ ok: boolean }> {
+    return this.http.patch<{ ok: boolean }>(
+      `${this.apiUrl}/notifications/read-all`,
+      {},
       { headers: this.getHeaders() }
     );
   }

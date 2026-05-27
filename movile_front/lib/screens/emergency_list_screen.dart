@@ -5,7 +5,6 @@ import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 import 'emergency_offers_screen.dart';
-import 'payment_qr_screen.dart';
 
 class EmergencyListScreen extends StatefulWidget {
   const EmergencyListScreen({super.key});
@@ -661,29 +660,7 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                         ],
                       ),
                     ),
-                    if (incident.payment!.status != 'paid' && incident.status == 'completed') ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final result = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => PaymentQrScreen(incident: incident),
-                              ),
-                            );
-                            if (!context.mounted) return;
-                            if (result == true) {
-                              Navigator.pop(context);
-                              _loadIncidents();
-                            }
-                          },
-                          icon: const Icon(Icons.qr_code_2),
-                          label: const Text('Pagar con QR'),
-                        ),
-                      ),
-                    ],
+
                   ],
                   if (incident.id != null &&
                       (incident.status == 'pending' ||
