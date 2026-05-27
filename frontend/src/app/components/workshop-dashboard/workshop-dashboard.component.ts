@@ -1,9 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { WorkshopService } from '../../services/workshop.service';
 import { IncidentService } from '../../services/incident.service';
-import { Workshop, Technician, Incident, WorkshopStats } from '../../models/models';
+import { Workshop, Technician, Incident, WorkshopStats, AppNotification } from '../../models/models';
 import { LocationData } from '../map-picker/map-picker.component';
 
 @Component({
@@ -11,7 +11,7 @@ import { LocationData } from '../map-picker/map-picker.component';
   templateUrl: './workshop-dashboard.component.html',
   styleUrls: ['./workshop-dashboard.component.css']
 })
-export class WorkshopDashboardComponent implements OnInit {
+export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   sidebarOpen = true;
   workshop: Workshop | null = null;
   technicians: Technician[] = [];
@@ -47,6 +47,11 @@ export class WorkshopDashboardComponent implements OnInit {
   workshopQrImageUrl = '';
   workshopQrPreviewData = '';
 
+  notifications: AppNotification[] = [];
+  unreadNotificationsCount = 0;
+  loadingNotifications = false;
+  private notificationPollTimer: number | null = null;
+
   // Accept incident modal state
   showAcceptModal = false;
   selectedIncident: Incident | null = null;
@@ -56,7 +61,7 @@ export class WorkshopDashboardComponent implements OnInit {
   };
 
   // Navigation state
-  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' = 'dashboard';
+  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications' = 'dashboard';
 
   reportFilters = {
     startDate: '',
@@ -75,6 +80,11 @@ export class WorkshopDashboardComponent implements OnInit {
   ngOnInit(): void {
     this.sidebarOpen = typeof window !== 'undefined' ? window.innerWidth > 768 : true;
     this.loadAllData();
+    this.startNotificationPolling();
+  }
+
+  ngOnDestroy(): void {
+    this.stopNotificationPolling();
   }
 
   toggleSidebar(): void {
@@ -84,6 +94,7 @@ export class WorkshopDashboardComponent implements OnInit {
   loadAllData(): void {
     this.loading = true;
     this.error = '';
+    this.loadNotifications(true);
 
     // Load workshop info
     this.workshopService.getMyWorkshop().subscribe({
@@ -248,11 +259,81 @@ export class WorkshopDashboardComponent implements OnInit {
     });
   }
 
-  navigateTo(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports'): void {
+  navigateTo(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications'): void {
     this.currentView = view;
     if (view === 'incidents-history') {
       this.loadIncidentHistory();
     }
+    if (view === 'notifications') {
+      this.loadNotifications();
+    }
+  }
+
+  startNotificationPolling(): void {
+    this.loadNotifications(true);
+    this.stopNotificationPolling();
+    this.notificationPollTimer = window.setInterval(() => {
+      this.loadNotifications(true);
+    }, 15000);
+  }
+
+  stopNotificationPolling(): void {
+    if (this.notificationPollTimer !== null) {
+      window.clearInterval(this.notificationPollTimer);
+      this.notificationPollTimer = null;
+    }
+  }
+
+  loadNotifications(silent = false): void {
+    if (!silent) {
+      this.loadingNotifications = true;
+    }
+
+    this.workshopService.getNotifications(false, 100).subscribe({
+      next: (notifications) => {
+        this.notifications = notifications;
+        this.unreadNotificationsCount = notifications.filter(n => !n.is_read).length;
+        this.loadingNotifications = false;
+      },
+      error: () => {
+        this.loadingNotifications = false;
+      }
+    });
+  }
+
+  markNotificationAsRead(notification: AppNotification): void {
+    if (notification.is_read) {
+      return;
+    }
+
+    this.workshopService.markNotificationAsRead(notification.id).subscribe({
+      next: (updated) => {
+        this.notifications = this.notifications.map(item =>
+          item.id === updated.id ? updated : item
+        );
+        this.unreadNotificationsCount = this.notifications.filter(n => !n.is_read).length;
+      }
+    });
+  }
+
+  markAllNotificationsAsRead(): void {
+    this.workshopService.markAllNotificationsAsRead().subscribe({
+      next: () => {
+        this.notifications = this.notifications.map(item => ({ ...item, is_read: true }));
+        this.unreadNotificationsCount = 0;
+      }
+    });
+  }
+
+  getNotificationTypeLabel(notificationType: string): string {
+    const typeMap: { [key: string]: string } = {
+      offer_received: 'Oferta',
+      service_accepted_by_client: 'Aceptacion',
+      technician_on_the_way: 'En camino',
+      technician_started_service: 'Inicio',
+      technician_completed_service: 'Finalizacion'
+    };
+    return typeMap[notificationType] || 'General';
   }
 
   hasIncidentImage(incident: Incident): boolean {

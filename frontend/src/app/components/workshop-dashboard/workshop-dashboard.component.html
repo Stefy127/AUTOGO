@@ -56,6 +56,15 @@
         <span class="icon">🧾</span>
         <span *ngIf="sidebarOpen">Reporte</span>
       </button>
+
+      <button
+        class="nav-item"
+        [class.active]="currentView === 'notifications'"
+        (click)="navigateTo('notifications')">
+        <span class="icon">🔔</span>
+        <span *ngIf="sidebarOpen">Notificaciones</span>
+        <span class="badge-count" *ngIf="unreadNotificationsCount > 0">{{ unreadNotificationsCount }}</span>
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -79,6 +88,7 @@
       <h1 *ngIf="currentView === 'incidents-available'">Emergencias Disponibles</h1>
       <h1 *ngIf="currentView === 'incidents-history'">Historial de Emergencias</h1>
       <h1 *ngIf="currentView === 'reports'">Reporte de Emergencias</h1>
+      <h1 *ngIf="currentView === 'notifications'">Notificaciones del Taller</h1>
     </header>
 
     <!-- Error Message -->
@@ -623,6 +633,50 @@
           <button class="btn-primary" (click)="downloadReportPdf()" [disabled]="downloadingReport">
             {{ downloadingReport ? 'Generando...' : '📥 Descargar PDF' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW: Notifications -->
+    <div class="view-container" *ngIf="!loading && currentView === 'notifications'">
+      <div class="section-card">
+        <div class="notifications-header">
+          <h3>🔔 Bandeja de notificaciones</h3>
+          <div class="notifications-actions">
+            <button class="btn-secondary" (click)="loadNotifications()" [disabled]="loadingNotifications">
+              {{ loadingNotifications ? 'Actualizando...' : 'Actualizar' }}
+            </button>
+            <button class="btn-primary" (click)="markAllNotificationsAsRead()" [disabled]="unreadNotificationsCount === 0">
+              Marcar todas como leidas
+            </button>
+          </div>
+        </div>
+
+        <div class="notification-list" *ngIf="notifications.length > 0">
+          <div
+            class="notification-item"
+            [class.unread]="!notification.is_read"
+            *ngFor="let notification of notifications"
+            (click)="markNotificationAsRead(notification)">
+            <div class="notification-main">
+              <div class="notification-title-row">
+                <h4>{{ notification.title }}</h4>
+                <span class="notification-type">{{ getNotificationTypeLabel(notification.notification_type) }}</span>
+              </div>
+              <p>{{ notification.message }}</p>
+              <small>
+                {{ notification.created_at | date:'short' }}
+                <span *ngIf="notification.incident_id">• Emergencia #{{ notification.incident_id }}</span>
+              </small>
+            </div>
+            <span class="unread-dot" *ngIf="!notification.is_read"></span>
+          </div>
+        </div>
+
+        <div class="empty-state" *ngIf="notifications.length === 0">
+          <div class="empty-icon">🔕</div>
+          <h3>Sin notificaciones</h3>
+          <p>No hay eventos recientes para mostrar</p>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ from app.database import get_db
 from app.auth import get_current_user
 from app import models, schemas
 from app.services.mapbox_service import MapboxService
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 mapbox_service = MapboxService()
@@ -120,6 +121,15 @@ async def create_offer(
         notes=f"Oferta enviada por taller {workshop.name}"
     ))
 
+    create_notification(
+        db,
+        user_id=incident.user_id,
+        incident_id=incident.id,
+        title="Nueva oferta recibida",
+        message=f"{workshop.name} envio una oferta de ${float(offer_data.amount):.2f} para tu emergencia.",
+        notification_type="offer_received",
+    )
+
     db.commit()
     db.refresh(offer)
 
@@ -230,6 +240,15 @@ async def accept_offer(
         changed_by_user_id=current_user.id,
         notes=f"Oferta {offer.id} aceptada por cliente"
     ))
+
+    create_notification(
+        db,
+        user_id=offer.workshop.owner_id,
+        incident_id=incident.id,
+        title="Servicio aceptado por el cliente",
+        message=f"El cliente acepto tu oferta para la emergencia #{incident.id}.",
+        notification_type="service_accepted_by_client",
+    )
 
     db.commit()
 

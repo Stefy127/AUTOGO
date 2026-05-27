@@ -7,6 +7,7 @@ from app import models, schemas
 from app.auth import get_current_active_user
 from app.services.ai_service import AIService
 from app.services.mapbox_service import MapboxService
+from app.services.notification_service import create_notification
 import os
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -320,13 +321,39 @@ def update_incident(
     # Update timestamps based on status changes
     if "status" in update_data:
         new_status = update_data["status"]
-        
+
         if new_status == models.IncidentStatus.ACCEPTED and not incident.accepted_at:
             incident.accepted_at = datetime.utcnow()
         elif new_status == models.IncidentStatus.IN_PROGRESS and not incident.started_at:
             incident.started_at = datetime.utcnow()
+            create_notification(
+                db,
+                user_id=incident.user_id,
+                incident_id=incident.id,
+                title="Tu mecanico va en camino",
+                message="Tu servicio ya esta en progreso. El mecanico se dirige hacia ti.",
+                notification_type="technician_on_the_way",
+            )
+            if incident.workshop:
+                create_notification(
+                    db,
+                    user_id=incident.workshop.owner_id,
+                    incident_id=incident.id,
+                    title="Servicio iniciado",
+                    message=f"La emergencia #{incident.id} fue iniciada por el mecanico asignado.",
+                    notification_type="technician_started_service",
+                )
         elif new_status == models.IncidentStatus.COMPLETED and not incident.completed_at:
             incident.completed_at = datetime.utcnow()
+            if incident.workshop:
+                create_notification(
+                    db,
+                    user_id=incident.workshop.owner_id,
+                    incident_id=incident.id,
+                    title="Servicio finalizado",
+                    message=f"La emergencia #{incident.id} se marco como finalizada.",
+                    notification_type="technician_completed_service",
+                )
             
             # Mark technician as available again
             if incident.technician_id:
