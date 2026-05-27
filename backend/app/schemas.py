@@ -445,6 +445,20 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
 
 
+class NotificationResponse(BaseModel):
+    id: int
+    user_id: int
+    incident_id: Optional[int] = None
+    title: str
+    message: str
+    notification_type: str
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # Resolve forward refs declared in IncidentResponse
 IncidentResponse.model_rebuild()
 

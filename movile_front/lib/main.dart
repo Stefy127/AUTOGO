@@ -11,9 +11,11 @@ import 'screens/rental_vehicles_list_screen.dart';
 import 'screens/user_profile_screen.dart';
 import 'screens/technician_access_screen.dart';
 import 'screens/technician_dashboard_screen.dart';
+import 'screens/notifications_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/technician_access_service.dart';
+import 'services/mobile_notification_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -28,6 +30,14 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => TechnicianAccessService()),
+        ChangeNotifierProxyProvider<AuthService, MobileNotificationService>(
+          create: (_) => MobileNotificationService(),
+          update: (_, authService, notificationService) {
+            final service = notificationService ?? MobileNotificationService();
+            service.updateAuth(authService);
+            return service;
+          },
+        ),
         Provider(create: (_) => ApiService()),
       ],
       child: MaterialApp(
@@ -84,6 +94,7 @@ class MyApp extends StatelessWidget {
           '/rental-vehicles': (context) => const RentalVehiclesListScreen(),
           '/technician/access': (context) => const TechnicianAccessScreen(),
           '/technician/dashboard': (context) => const TechnicianDashboardScreen(),
+          '/notifications': (context) => const NotificationsScreen(),
         },
       ),
     );

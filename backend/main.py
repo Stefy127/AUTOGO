@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.config import settings
-from app.routers import auth, users, vehicles, incidents, workshops, payments, admin, rental_vehicles, audit_logs, technicians, offers, technician_portal, ai_analysis
+from app.routers import auth, users, vehicles, incidents, workshops, payments, admin, rental_vehicles, audit_logs, technicians, offers, technician_portal, ai_analysis, notifications
 from pathlib import Path
 
 # Create database tables
@@ -13,6 +13,7 @@ def _run_startup_migrations() -> None:
     migration_files = [
         Path(__file__).parent / "migrations" / "2026_04_24_marketplace_offers.sql",
         Path(__file__).parent / "migrations" / "2026_04_24_technician_portal.sql",
+        Path(__file__).parent / "migrations" / "2026_04_27_notifications_and_paymentmethod.sql",
     ]
 
     for migration_file in migration_files:
@@ -78,6 +79,7 @@ app.include_router(admin.router)
 app.include_router(rental_vehicles.router)
 app.include_router(audit_logs.router)
 app.include_router(ai_analysis.router)
+app.include_router(notifications.router)
 
 
 @app.get("/")

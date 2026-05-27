@@ -386,3 +386,38 @@ class RentalVehicle {
     );
   }
 }
+
+class AppNotification {
+  final int id;
+  final int userId;
+  final int? incidentId;
+  final String title;
+  final String message;
+  final String notificationType;
+  final bool isRead;
+  final DateTime createdAt;
+
+  AppNotification({
+    required this.id,
+    required this.userId,
+    this.incidentId,
+    required this.title,
+    required this.message,
+    required this.notificationType,
+    required this.isRead,
+    required this.createdAt,
+  });
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    return AppNotification(
+      id: json['id'],
+      userId: json['user_id'],
+      incidentId: json['incident_id'],
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      notificationType: json['notification_type']?.toString() ?? 'general',
+      isRead: json['is_read'] == true,
+      createdAt: DateTime.parse(json['created_at']),
+    );
+  }
+}

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app import models, schemas
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/technician", tags=["technician-portal"])
 security = HTTPBearer(auto_error=False)
@@ -177,10 +178,36 @@ def update_technician_incident_status(
     incident.status = payload.status
     if payload.status == models.IncidentStatus.IN_PROGRESS and not incident.started_at:
         incident.started_at = datetime.utcnow()
+        create_notification(
+            db,
+            user_id=incident.user_id,
+            incident_id=incident.id,
+            title="Tu mecanico va en camino",
+            message=f"{technician.name} ya va en camino a tu ubicacion.",
+            notification_type="technician_on_the_way",
+        )
+        if incident.workshop:
+            create_notification(
+                db,
+                user_id=incident.workshop.owner_id,
+                incident_id=incident.id,
+                title="Servicio iniciado",
+                message=f"El mecanico {technician.name} inicio el servicio de la emergencia #{incident.id}.",
+                notification_type="technician_started_service",
+            )
 
     if payload.status == models.IncidentStatus.COMPLETED and not incident.completed_at:
         incident.completed_at = datetime.utcnow()
         technician.is_available = True
+        if incident.workshop:
+            create_notification(
+                db,
+                user_id=incident.workshop.owner_id,
+                incident_id=incident.id,
+                title="Servicio finalizado",
+                message=f"El mecanico {technician.name} finalizo la emergencia #{incident.id}.",
+                notification_type="technician_completed_service",
+            )
 
     history = models.IncidentHistory(
         incident_id=incident.id,
