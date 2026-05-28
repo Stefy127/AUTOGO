@@ -14,6 +14,7 @@ def _run_startup_migrations() -> None:
         Path(__file__).parent / "migrations" / "2026_04_24_marketplace_offers.sql",
         Path(__file__).parent / "migrations" / "2026_04_24_technician_portal.sql",
         Path(__file__).parent / "migrations" / "2026_04_27_notifications_and_paymentmethod.sql",
+        Path(__file__).parent / "migrations" / "2026_05_28_stripe_payments.sql",
     ]
 
     for migration_file in migration_files:

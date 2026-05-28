@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U autogo"]
+      test: ["CMD-SHELL", "pg_isready -U autogo -d autogo_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,6 +37,11 @@ services:
       GEMINI_API_KEY: AIzaSyAITV-lqkc4FgVmWeFGo21OLF0N_jNcUs0
       MAPBOX_API_KEY: pk.eyJ1IjoiYW5nZWxtb3JhMzciLCJhIjoiY21uczVzemtqMGEwbTJzcTA5NGJuODk4eSJ9.N1m0wsLi4oNu-dmRDG4z1w
       MAX_WORKSHOP_DISTANCE_KM: "50"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_SUCCESS_URL: http://localhost:4200/#/payment-success
+      STRIPE_CANCEL_URL: http://localhost:4200/#/payment-cancel
+      STRIPE_CURRENCY: usd
     depends_on:
       postgres:
         condition: service_healthy

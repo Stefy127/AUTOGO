@@ -395,6 +395,10 @@ class PaymentResponse(PaymentBase):
     workshop_earnings: float
     is_paid: bool
     paid_at: Optional[datetime] = None
+    stripe_session_id: Optional[str] = None
+    stripe_payment_intent_id: Optional[str] = None
+    stripe_payment_status: Optional[str] = None
+    currency: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

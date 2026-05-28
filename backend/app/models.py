@@ -301,6 +301,12 @@ class Payment(Base):
     # Optional payment reference
     reference_number = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+
+    # CU25 - Stripe traceability fields (fase 1 preparación)
+    stripe_session_id = Column(String, nullable=True)
+    stripe_payment_intent_id = Column(String, nullable=True)
+    stripe_payment_status = Column(String, nullable=True)
+    currency = Column(String(10), nullable=False, default="usd")
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
