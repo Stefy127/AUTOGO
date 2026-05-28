@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+import stripe
 
 from app.database import get_db
 from app.models import User, Payment, Incident, Workshop, UserRole, IncidentStatus, PaymentMethod, WorkshopPaymentQR
-from app.schemas import PaymentCreate, PaymentResponse, PaymentUpdate, PaymentQRConfirm
+from app.schemas import PaymentCreate, PaymentResponse, PaymentUpdate, PaymentQRConfirm, StripeCheckoutResponse
 from app.auth import get_current_user
+from app.config import settings
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -23,6 +26,13 @@ def calculate_commission(amount: float, commission_percentage: float):
         "commission_amount": float(commission_amount),
         "workshop_earnings": float(workshop_earnings)
     }
+
+
+def _append_query_params(url: str, params: dict[str, str]) -> str:
+    parsed = urlparse(url)
+    current = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    current.update(params)
+    return urlunparse(parsed._replace(query=urlencode(current)))
 
 
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
@@ -106,6 +116,139 @@ async def create_payment(
     db.refresh(new_payment)
     
     return new_payment
+
+
+@router.post("/{payment_id}/stripe/checkout", response_model=StripeCheckoutResponse)
+async def create_stripe_checkout(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Crear una sesión de Stripe Checkout para un pago pendiente existente.
+    """
+    if current_user.role != UserRole.CLIENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo clientes pueden crear checkout con Stripe"
+        )
+
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe no está configurado: falta STRIPE_SECRET_KEY"
+        )
+
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pago no encontrado"
+        )
+
+    incident = db.query(Incident).filter(Incident.id == payment.incident_id).first()
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente asociado no encontrado"
+        )
+
+    if incident.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para pagar este incidente"
+        )
+
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este pago ya fue completado"
+        )
+
+    if incident.status != IncidentStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se puede pagar con Stripe cuando el incidente está COMPLETED"
+        )
+
+    amount_decimal = Decimal(str(payment.amount))
+    if amount_decimal <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Monto de pago inválido para checkout"
+        )
+
+    unit_amount = int((amount_decimal * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    currency = (settings.STRIPE_CURRENCY or "usd").lower()
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    metadata = {
+        "payment_id": str(payment.id),
+        "incident_id": str(incident.id),
+        "client_id": str(current_user.id),
+    }
+
+    success_url = _append_query_params(
+        settings.STRIPE_SUCCESS_URL,
+        {
+            "payment_id": str(payment.id),
+            "session_id": "{CHECKOUT_SESSION_ID}",
+        }
+    )
+    cancel_url = _append_query_params(
+        settings.STRIPE_CANCEL_URL,
+        {
+            "payment_id": str(payment.id),
+            "session_id": "{CHECKOUT_SESSION_ID}",
+        }
+    )
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="payment",
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata=metadata,
+            payment_intent_data={"metadata": metadata},
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": currency,
+                        "unit_amount": unit_amount,
+                        "product_data": {
+                            "name": f"Servicio AutoGo - Incidente #{incident.id}",
+                            "description": "Pago de atención de emergencia vehicular",
+                        },
+                    },
+                }
+            ],
+        )
+    except stripe.error.StripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear checkout en Stripe: {str(exc)}"
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error inesperado al crear checkout: {str(exc)}"
+        )
+
+    payment.stripe_session_id = checkout_session.id
+    payment.stripe_payment_status = checkout_session.payment_status
+    payment.currency = currency
+
+    db.commit()
+    db.refresh(payment)
+
+    return StripeCheckoutResponse(
+        payment_id=payment.id,
+        checkout_url=checkout_session.url,
+        stripe_session_id=checkout_session.id,
+        stripe_payment_status=checkout_session.payment_status,
+        currency=currency,
+    )
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

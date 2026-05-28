@@ -406,6 +406,14 @@ class PaymentResponse(PaymentBase):
         from_attributes = True
 
 
+class StripeCheckoutResponse(BaseModel):
+    payment_id: int
+    checkout_url: str
+    stripe_session_id: str
+    stripe_payment_status: Optional[str] = None
+    currency: str
+
+
 # IncidentHistory Schemas
 class IncidentHistoryCreate(BaseModel):
     incident_id: int
