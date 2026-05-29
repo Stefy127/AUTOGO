@@ -414,6 +414,25 @@ class StripeCheckoutResponse(BaseModel):
     currency: str
 
 
+class StripeWebhookResponse(BaseModel):
+    received: bool
+
+
+class PaymentStatusResponse(BaseModel):
+    payment_id: int
+    incident_id: int
+    amount: float
+    is_paid: bool
+    paid_at: Optional[datetime] = None
+    payment_method: PaymentMethod
+    stripe_session_id: Optional[str] = None
+    stripe_payment_intent_id: Optional[str] = None
+    stripe_payment_status: Optional[str] = None
+    currency: Optional[str] = None
+    commission_amount: float
+    workshop_earnings: float
+
+
 # IncidentHistory Schemas
 class IncidentHistoryCreate(BaseModel):
     incident_id: int
