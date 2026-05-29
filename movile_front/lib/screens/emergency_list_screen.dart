@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
@@ -16,6 +17,7 @@ class EmergencyListScreen extends StatefulWidget {
 class _EmergencyListScreenState extends State<EmergencyListScreen> {
   List<Incident> _incidents = [];
   bool _isLoading = true;
+  int? _stripeLoadingPaymentId;
 
   @override
   void initState() {
@@ -113,6 +115,53 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
         return '🟢 Baja';
       default:
         return priority;
+    }
+  }
+
+  bool _canShowStripeButton(Incident incident) {
+    return incident.status == 'completed' &&
+        incident.payment != null &&
+        incident.payment!.status != 'paid';
+  }
+
+  Future<void> _payWithStripe(Incident incident) async {
+    final payment = incident.payment;
+    if (payment == null) return;
+
+    setState(() => _stripeLoadingPaymentId = payment.id);
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    try {
+      final response = await apiService.post(
+        '/payments/${payment.id}/stripe/checkout',
+        {},
+        token: authService.token,
+      );
+
+      final checkoutUrl = (response['checkout_url'] ?? '').toString();
+      if (checkoutUrl.isEmpty) {
+        throw Exception('Checkout URL vacío');
+      }
+
+      final launched = await launchUrl(
+        Uri.parse(checkoutUrl),
+        webOnlyWindowName: '_self',
+      );
+
+      if (!launched) {
+        throw Exception('No se pudo abrir Stripe Checkout');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _stripeLoadingPaymentId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo iniciar el pago con Stripe: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -314,6 +363,32 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                       ],
                                     ),
                                   ),
+                                if (_canShowStripeButton(incident)) ...[
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: _stripeLoadingPaymentId == incident.payment?.id
+                                          ? null
+                                          : () => _payWithStripe(incident),
+                                      icon: _stripeLoadingPaymentId == incident.payment?.id
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            )
+                                          : const Icon(Icons.credit_card),
+                                      label: Text(
+                                        _stripeLoadingPaymentId == incident.payment?.id
+                                            ? 'Abriendo Stripe...'
+                                            : 'Pagar con Stripe',
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.indigo,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -660,6 +735,32 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                         ],
                       ),
                     ),
+                    if (_canShowStripeButton(incident)) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _stripeLoadingPaymentId == incident.payment?.id
+                              ? null
+                              : () => _payWithStripe(incident),
+                          icon: _stripeLoadingPaymentId == incident.payment?.id
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.credit_card),
+                          label: Text(
+                            _stripeLoadingPaymentId == incident.payment?.id
+                                ? 'Abriendo Stripe...'
+                                : 'Pagar con Stripe',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                          ),
+                        ),
+                      ),
+                    ],
 
                   ],
                   if (incident.id != null &&

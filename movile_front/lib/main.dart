@@ -12,6 +12,7 @@ import 'screens/user_profile_screen.dart';
 import 'screens/technician_access_screen.dart';
 import 'screens/technician_dashboard_screen.dart';
 import 'screens/notifications_screen.dart';
+import 'screens/payment_success_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/technician_access_service.dart';
@@ -82,6 +83,30 @@ class MyApp extends StatelessWidget {
           ),
         ),
         initialRoute: '/login',
+        onGenerateRoute: (settings) {
+          final routeName = settings.name ?? '/login';
+          final uri = Uri.tryParse(routeName);
+          final path = uri?.path ?? routeName;
+
+          if (path == '/payment-success') {
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (context) => PaymentSuccessScreen(
+                paymentId: uri?.queryParameters['payment_id'],
+                sessionId: uri?.queryParameters['session_id'],
+              ),
+            );
+          }
+
+          if (path == '/payment-cancel') {
+            return MaterialPageRoute(
+              settings: settings,
+              builder: (context) => const EmergencyListScreen(),
+            );
+          }
+
+          return null;
+        },
         routes: {
           '/login': (context) => const LoginScreen(),
           '/register': (context) => const RegisterScreen(),
@@ -95,6 +120,8 @@ class MyApp extends StatelessWidget {
           '/technician/access': (context) => const TechnicianAccessScreen(),
           '/technician/dashboard': (context) => const TechnicianDashboardScreen(),
           '/notifications': (context) => const NotificationsScreen(),
+          '/payment-success': (context) => const PaymentSuccessScreen(),
+          '/payment-cancel': (context) => const EmergencyListScreen(),
         },
       ),
     );

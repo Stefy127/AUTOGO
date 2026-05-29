@@ -39,6 +39,13 @@ def calculate_commission(amount: float, commission_percentage: float):
 
 def _append_query_params(url: str, params: dict[str, str]) -> str:
     parsed = urlparse(url)
+    if parsed.fragment:
+        fragment_path, _, fragment_query = parsed.fragment.partition("?")
+        current_fragment_query = dict(parse_qsl(fragment_query, keep_blank_values=True))
+        current_fragment_query.update(params)
+        new_fragment = f"{fragment_path}?{urlencode(current_fragment_query)}"
+        return urlunparse(parsed._replace(fragment=new_fragment))
+
     current = dict(parse_qsl(parsed.query, keep_blank_values=True))
     current.update(params)
     return urlunparse(parsed._replace(query=urlencode(current)))
