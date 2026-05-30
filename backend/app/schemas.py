@@ -169,6 +169,22 @@ class IncidentCreate(IncidentBase):
     vehicle_id: int
 
 
+class OfflineIncidentSyncRequest(BaseModel):
+    client_offline_id: str = Field(..., min_length=1)
+    client_email: EmailStr
+    client_phone: Optional[str] = None
+    vehicle_brand: str = Field(..., min_length=1)
+    vehicle_model: str = Field(..., min_length=1)
+    vehicle_year: int = Field(..., ge=1900, le=2100)
+    vehicle_plate: str = Field(..., min_length=1)
+    incident_type: Optional[str] = None
+    description: str = Field(..., min_length=1)
+    address: str = Field(..., min_length=1)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    created_offline_at: datetime
+
+
 class IncidentUpdate(BaseModel):
     status: Optional[IncidentStatus] = None
     description: Optional[str] = None
@@ -431,6 +447,13 @@ class PaymentStatusResponse(BaseModel):
     currency: Optional[str] = None
     commission_amount: float
     workshop_earnings: float
+
+
+class OfflineIncidentSyncResponse(BaseModel):
+    incident: IncidentResponse
+    created: bool
+    idempotent: bool
+    message: str
 
 
 # IncidentHistory Schemas

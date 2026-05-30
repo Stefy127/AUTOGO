@@ -89,6 +89,138 @@ async def create_incident(
     return db_incident
 
 
+@router.post("/offline-sync", response_model=schemas.OfflineIncidentSyncResponse)
+def offline_sync_incident(
+    payload: schemas.OfflineIncidentSyncRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Sincroniza una emergencia creada offline sin requerir JWT.
+    """
+    client_offline_id = payload.client_offline_id.strip()
+    vehicle_brand = payload.vehicle_brand.strip()
+    vehicle_model = payload.vehicle_model.strip()
+    vehicle_plate = payload.vehicle_plate.strip().upper()
+    description = payload.description.strip()
+    address = payload.address.strip()
+
+    if not client_offline_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="client_offline_id es obligatorio"
+        )
+    if not vehicle_brand or not vehicle_model or not vehicle_plate:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="vehicle_brand, vehicle_model y vehicle_plate son obligatorios"
+        )
+    if not description or not address:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="description y address son obligatorios"
+        )
+
+    client_user = db.query(models.User).filter(
+        models.User.email == payload.client_email
+    ).first()
+    if not client_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No existe un usuario registrado con ese correo"
+        )
+    if client_user.role != models.UserRole.CLIENT:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El correo no pertenece a un cliente registrado"
+        )
+
+    existing_incident = db.query(models.Incident).options(
+        joinedload(models.Incident.user),
+        joinedload(models.Incident.vehicle),
+        joinedload(models.Incident.workshop),
+        joinedload(models.Incident.technician),
+        joinedload(models.Incident.payment),
+        joinedload(models.Incident.offers).joinedload(models.Offer.workshop),
+        joinedload(models.Incident.offers).joinedload(models.Offer.technician)
+    ).filter(
+        models.Incident.user_id == client_user.id,
+        models.Incident.client_offline_id == client_offline_id
+    ).first()
+
+    if existing_incident:
+        return schemas.OfflineIncidentSyncResponse(
+            incident=existing_incident,
+            created=False,
+            idempotent=True,
+            message="Incidente ya sincronizado previamente"
+        )
+
+    vehicle = db.query(models.Vehicle).filter(
+        models.Vehicle.plate == vehicle_plate
+    ).first()
+
+    if vehicle and vehicle.user_id != client_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La placa ya pertenece a otro usuario"
+        )
+
+    if not vehicle:
+        vehicle = models.Vehicle(
+            user_id=client_user.id,
+            brand=vehicle_brand,
+            model=vehicle_model,
+            year=payload.vehicle_year,
+            plate=vehicle_plate
+        )
+        db.add(vehicle)
+        db.flush()
+
+    db_incident = models.Incident(
+        user_id=client_user.id,
+        vehicle_id=vehicle.id,
+        description=description,
+        status=models.IncidentStatus.PENDING,
+        priority=models.IncidentPriority.MEDIUM,
+        location_text=address,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        client_offline_id=client_offline_id,
+        client_email_offline=payload.client_email,
+        created_offline_at=payload.created_offline_at,
+        synced_at=datetime.utcnow(),
+        sync_source="offline",
+    )
+    db.add(db_incident)
+    db.flush()
+
+    db.add(models.IncidentHistory(
+        incident_id=db_incident.id,
+        status=models.IncidentStatus.PENDING,
+        changed_by_user_id=client_user.id,
+        notes="Incidente sincronizado desde modo offline"
+    ))
+
+    db.commit()
+
+    created_incident = db.query(models.Incident).options(
+        joinedload(models.Incident.user),
+        joinedload(models.Incident.vehicle),
+        joinedload(models.Incident.workshop),
+        joinedload(models.Incident.technician),
+        joinedload(models.Incident.payment),
+        joinedload(models.Incident.offers).joinedload(models.Offer.workshop),
+        joinedload(models.Incident.offers).joinedload(models.Offer.technician)
+    ).filter(models.Incident.id == db_incident.id).first()
+
+    return schemas.OfflineIncidentSyncResponse(
+        incident=created_incident,
+        created=True,
+        idempotent=False,
+        message="Incidente sincronizado correctamente"
+    )
+
+
 @router.get("", response_model=List[schemas.IncidentResponse])
 def get_incidents(
     status: Optional[str] = None,

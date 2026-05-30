@@ -230,6 +230,13 @@ class Incident(Base):
     accepted_at = Column(DateTime, nullable=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+
+    # Offline sync traceability (CU22)
+    client_offline_id = Column(String, nullable=True, index=True)
+    client_email_offline = Column(String, nullable=True)
+    created_offline_at = Column(DateTime, nullable=True)
+    synced_at = Column(DateTime, nullable=True)
+    sync_source = Column(String, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
