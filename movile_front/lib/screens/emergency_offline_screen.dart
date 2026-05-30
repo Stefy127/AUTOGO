@@ -236,6 +236,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
         : double.tryParse(_longitudeController.text.trim());
 
     if (_isEditing && _activeEmergency != null) {
+      final wasFailed = _activeEmergency!.syncStatus == 'failed';
       final updated = _activeEmergency!.copyWith(
         clientEmail: _clientEmailController.text.trim(),
         clientPhone: _clientPhoneController.text.trim().isEmpty
@@ -250,6 +251,8 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
         address: _addressController.text.trim(),
         latitude: lat,
         longitude: lng,
+        syncStatus: wasFailed ? 'pending' : _activeEmergency!.syncStatus,
+        lastError: wasFailed ? '' : _activeEmergency!.lastError,
       );
 
       await _storageService.updateEmergency(updated);
@@ -355,6 +358,27 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
   }
 
   Future<void> _deleteEmergencyLocal() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar emergencia local'),
+        content: const Text(
+          '¿Seguro que deseas eliminar esta emergencia guardada localmente?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     await _storageService.deleteEmergency();
     if (!mounted) return;
     setState(() {
@@ -521,6 +545,13 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
             ),
             const SizedBox(height: 10),
             _buildSyncStatusChip(status),
+            if (status == 'pending') ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Pendiente de sincronización. Esta emergencia aún no fue enviada al sistema.',
+                style: TextStyle(color: Colors.black87),
+              ),
+            ],
             const SizedBox(height: 10),
             Text('Correo: ${emergency.clientEmail}'),
             Text('Vehículo: ${emergency.vehicleBrand} ${emergency.vehicleModel}'),
@@ -530,17 +561,37 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
             if (emergency.latitude != null && emergency.longitude != null)
               Text('Lat/Lng: ${emergency.latitude}, ${emergency.longitude}'),
             Text('Estado: ${emergency.syncStatus}'),
+            Text('Intentos de sincronización: ${emergency.syncAttempts}'),
             Text(
               'Creada: ${DateFormat('dd/MM/yyyy HH:mm').format(emergency.createdOfflineAt.toLocal())}',
             ),
             if (emergency.backendIncidentId != null)
               Text('Incident ID backend: ${emergency.backendIncidentId}'),
+            if (emergency.syncedAt != null)
+              Text(
+                'Sincronizada: ${DateFormat('dd/MM/yyyy HH:mm').format(emergency.syncedAt!.toLocal())}',
+              ),
             if (emergency.lastError != null && emergency.lastError!.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
+              const Text(
+                'Error de sincronización',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              ),
               Text(
                 emergency.lastError!,
                 style: const TextStyle(color: Colors.red),
               ),
+              const SizedBox(height: 4),
+              if ((emergency.lastError ?? '').toLowerCase().contains('correo'))
+                const Text(
+                  'Sugerencia: revisa y corrige el correo antes de reintentar.',
+                  style: TextStyle(color: Colors.red),
+                ),
+              if ((emergency.lastError ?? '').toLowerCase().contains('placa'))
+                const Text(
+                  'Sugerencia: revisa la placa del vehículo antes de reintentar.',
+                  style: TextStyle(color: Colors.red),
+                ),
             ],
             const SizedBox(height: 12),
             if (status == 'pending')
