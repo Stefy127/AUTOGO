@@ -182,3 +182,78 @@ export interface AuditLog {
   details?: string;
   created_at: string;
 }
+
+export interface OperationalReportRequest {
+  start_date?: string;
+  end_date?: string;
+  workshop_id?: number;
+  incident_type?: string;
+  status?: string;
+  technician_id?: number;
+  client_id?: number;
+  vehicle_id?: number;
+  payment_method?: 'cash' | 'transfer' | 'qr';
+}
+
+export interface AppliedFilters {
+  start_date?: string | null;
+  end_date?: string | null;
+  workshop_id?: number | null;
+  incident_type?: string | null;
+  status?: string | null;
+  technician_id?: number | null;
+  client_id?: number | null;
+  vehicle_id?: number | null;
+  payment_method?: string | null;
+}
+
+export interface OperationalReportSummary {
+  total_incidents: number;
+  pending: number;
+  waiting_offers: number;
+  assigned: number;
+  accepted: number;
+  in_progress: number;
+  completed: number;
+  cancelled: number;
+  total_amount: number;
+  total_workshop_earnings: number;
+  total_paid: number;
+  total_unpaid: number;
+}
+
+export interface OperationalReportItem {
+  incident_id: number;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+  status: Incident['status'];
+  priority: Incident['priority'];
+  classification?: string | null;
+  description: string;
+  location_text?: string | null;
+  client_id: number;
+  client_name?: string | null;
+  client_email?: string | null;
+  vehicle_id?: number | null;
+  vehicle_brand?: string | null;
+  vehicle_model?: string | null;
+  vehicle_plate?: string | null;
+  workshop_id?: number | null;
+  workshop_name?: string | null;
+  technician_id?: number | null;
+  technician_name?: string | null;
+  payment_id?: number | null;
+  payment_amount?: number | null;
+  payment_method?: Payment['payment_method'] | null;
+  payment_is_paid?: boolean | null;
+  commission_amount?: number | null;
+  workshop_earnings?: number | null;
+}
+
+export interface OperationalReportResponse {
+  role_scope: 'admin' | 'workshop' | 'client';
+  applied_filters: AppliedFilters;
+  summary: OperationalReportSummary;
+  items: OperationalReportItem[];
+}
