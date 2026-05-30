@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 
 
@@ -447,6 +447,81 @@ class PaymentStatusResponse(BaseModel):
     currency: Optional[str] = None
     commission_amount: float
     workshop_earnings: float
+
+
+class OperationalReportRequest(BaseModel):
+    start_date: Optional[date | datetime] = None
+    end_date: Optional[date | datetime] = None
+    workshop_id: Optional[int] = None
+    incident_type: Optional[str] = None
+    status: Optional[str] = None
+    technician_id: Optional[int] = None
+    client_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    payment_method: Optional[str] = None
+
+
+class OperationalReportAppliedFilters(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    workshop_id: Optional[int] = None
+    incident_type: Optional[str] = None
+    status: Optional[str] = None
+    technician_id: Optional[int] = None
+    client_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    payment_method: Optional[str] = None
+
+
+class OperationalReportSummary(BaseModel):
+    total_incidents: int
+    pending: int
+    waiting_offers: int
+    assigned: int
+    accepted: int
+    in_progress: int
+    completed: int
+    cancelled: int
+    total_amount: float
+    total_workshop_earnings: float
+    total_paid: int
+    total_unpaid: int
+
+
+class OperationalReportItem(BaseModel):
+    incident_id: int
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+    status: IncidentStatus
+    priority: IncidentPriority
+    classification: Optional[str] = None
+    description: str
+    location_text: Optional[str] = None
+    client_id: int
+    client_name: Optional[str] = None
+    client_email: Optional[str] = None
+    vehicle_id: Optional[int] = None
+    vehicle_brand: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_plate: Optional[str] = None
+    workshop_id: Optional[int] = None
+    workshop_name: Optional[str] = None
+    technician_id: Optional[int] = None
+    technician_name: Optional[str] = None
+    payment_id: Optional[int] = None
+    payment_amount: Optional[float] = None
+    payment_method: Optional[PaymentMethod] = None
+    payment_is_paid: Optional[bool] = None
+    commission_amount: Optional[float] = None
+    workshop_earnings: Optional[float] = None
+
+
+class OperationalReportResponse(BaseModel):
+    role_scope: str
+    applied_filters: OperationalReportAppliedFilters
+    summary: OperationalReportSummary
+    items: list[OperationalReportItem]
 
 
 class OfflineIncidentSyncResponse(BaseModel):
