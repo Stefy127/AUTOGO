@@ -1,11 +1,14 @@
-﻿import 'dart:math';
+﻿import 'dart:async';
+import 'dart:math';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../models/offline_emergency.dart';
 import '../services/offline_emergency_storage_service.dart';
+import '../services/offline_emergency_sync_service.dart';
 
 class EmergencyOfflineScreen extends StatefulWidget {
   const EmergencyOfflineScreen({super.key});
@@ -17,6 +20,7 @@ class EmergencyOfflineScreen extends StatefulWidget {
 class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
   final _formKey = GlobalKey<FormState>();
   final _storageService = OfflineEmergencyStorageService();
+  final _syncService = OfflineEmergencySyncService();
 
   final _clientEmailController = TextEditingController();
   final _clientPhoneController = TextEditingController();
@@ -33,15 +37,19 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
   OfflineEmergency? _activeEmergency;
   bool _isEditing = false;
   bool _loading = true;
+  bool _isSyncing = false;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadActiveEmergency();
+    _loadActiveEmergencyAndAutoSync();
+    _listenConnectivityChanges();
   }
 
   @override
   void dispose() {
+    _connectivitySubscription?.cancel();
     _clientEmailController.dispose();
     _clientPhoneController.dispose();
     _vehicleBrandController.dispose();
@@ -56,18 +64,64 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
     super.dispose();
   }
 
-  Future<void> _loadActiveEmergency() async {
-    final emergency = await _storageService.getActiveEmergency();
+  Future<void> _loadActiveEmergencyAndAutoSync() async {
+    var emergency = await _storageService.getActiveEmergency();
+
+    if (emergency != null && emergency.syncStatus == 'syncing') {
+      emergency = emergency.copyWith(
+        syncStatus: 'failed',
+        lastError: 'La sincronización anterior no se completó. Puedes reintentar.',
+      );
+      await _storageService.updateEmergency(emergency);
+      _scheduleClearLastError(
+        expectedLocalId: emergency.localId,
+        expectedError: emergency.lastError ?? '',
+      );
+    }
+
     if (!mounted) return;
     setState(() {
       _activeEmergency = emergency;
       _loading = false;
       _isEditing = false;
     });
+
+    await _tryAutoSyncIfPossible();
   }
 
-  bool _isActiveStatus(String status) {
-    return status == 'pending' || status == 'syncing' || status == 'failed';
+  void _listenConnectivityChanges() {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) async {
+      final online = _hasNetwork(results);
+      if (!online) return;
+      await _tryAutoSyncIfPossible();
+    });
+  }
+
+  bool _hasNetwork(List<ConnectivityResult> results) {
+    if (results.isEmpty) return false;
+    return results.any((r) => r != ConnectivityResult.none);
+  }
+
+  bool _canSync(String status) {
+    return status == 'pending' || status == 'failed';
+  }
+
+  void _scheduleClearLastError({
+    required String expectedLocalId,
+    required String expectedError,
+  }) {
+    Future.delayed(const Duration(seconds: 10), () async {
+      if (!mounted) return;
+      final current = _activeEmergency;
+      if (current == null) return;
+      if (current.localId != expectedLocalId) return;
+      if ((current.lastError ?? '').trim() != expectedError.trim()) return;
+
+      final cleared = current.copyWith(lastError: '');
+      await _storageService.updateEmergency(cleared);
+      if (!mounted) return;
+      setState(() => _activeEmergency = cleared);
+    });
   }
 
   void _populateForm(OfflineEmergency emergency) {
@@ -169,7 +223,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
           backgroundColor: Colors.orange,
         ),
       );
-      await _loadActiveEmergency();
+      await _loadActiveEmergencyAndAutoSync();
       return;
     }
 
@@ -252,6 +306,8 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
         backgroundColor: Colors.green,
       ),
     );
+
+    await _tryAutoSyncIfPossible();
   }
 
   Future<void> _captureCurrentLocation() async {
@@ -304,6 +360,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
     setState(() {
       _activeEmergency = null;
       _isEditing = false;
+      _isSyncing = false;
     });
     _clearForm();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -314,7 +371,142 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
     );
   }
 
-  Widget _buildActiveEmergencyCard(OfflineEmergency emergency) {
+  Future<void> _clearSyncedRecord() async {
+    await _storageService.deleteEmergency();
+    if (!mounted) return;
+    setState(() {
+      _activeEmergency = null;
+      _isEditing = false;
+      _isSyncing = false;
+    });
+    _clearForm();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Registro local limpiado correctamente.'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Future<void> _tryAutoSyncIfPossible() async {
+    final emergency = _activeEmergency;
+    if (emergency == null) return;
+    if (_isSyncing) return;
+    if (!_canSync(emergency.syncStatus)) return;
+
+    final connectivityResults = await Connectivity().checkConnectivity();
+    if (!_hasNetwork(connectivityResults)) return;
+
+    await _syncEmergency(manual: false);
+  }
+
+  Future<void> _syncEmergency({required bool manual}) async {
+    final emergency = _activeEmergency;
+    if (emergency == null) return;
+    if (_isSyncing) return;
+    if (!_canSync(emergency.syncStatus)) return;
+
+    setState(() {
+      _isSyncing = true;
+      _activeEmergency = emergency.copyWith(syncStatus: 'syncing');
+    });
+    await _storageService.updateEmergency(_activeEmergency!);
+
+    final result = await _syncService.syncOfflineEmergency(_activeEmergency!);
+    if (!mounted) return;
+
+    if (result.success) {
+      final synced = _activeEmergency!.copyWith(
+        syncStatus: 'synced',
+        backendIncidentId: result.backendIncidentId,
+        syncedAt: DateTime.now().toUtc(),
+        lastError: '',
+      );
+      await _storageService.updateEmergency(synced);
+      setState(() {
+        _activeEmergency = synced;
+        _isSyncing = false;
+        _isEditing = false;
+      });
+
+      final successMessage = result.idempotent
+          ? 'Emergencia ya había sido sincronizada previamente.'
+          : 'Emergencia sincronizada correctamente.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(successMessage),
+          backgroundColor: Colors.green,
+        ),
+      );
+      return;
+    }
+
+    final failed = _activeEmergency!.copyWith(
+      syncStatus: 'failed',
+      syncAttempts: _activeEmergency!.syncAttempts + 1,
+      lastError: result.message,
+    );
+    await _storageService.updateEmergency(failed);
+    setState(() {
+      _activeEmergency = failed;
+      _isSyncing = false;
+    });
+    _scheduleClearLastError(
+      expectedLocalId: failed.localId,
+      expectedError: failed.lastError ?? '',
+    );
+
+    if (manual) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Widget _buildSyncStatusChip(String status) {
+    Color bg;
+    Color fg;
+    String text;
+
+    switch (status) {
+      case 'syncing':
+        bg = Colors.blue.shade100;
+        fg = Colors.blue.shade800;
+        text = 'Sincronizando emergencia...';
+        break;
+      case 'failed':
+        bg = Colors.red.shade100;
+        fg = Colors.red.shade800;
+        text = 'Sincronización fallida';
+        break;
+      case 'synced':
+        bg = Colors.green.shade100;
+        fg = Colors.green.shade800;
+        text = 'Emergencia sincronizada correctamente';
+        break;
+      default:
+        bg = Colors.orange.shade100;
+        fg = Colors.orange.shade800;
+        text = 'Pendiente de sincronización';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _buildEmergencyCard(OfflineEmergency emergency) {
+    final status = emergency.syncStatus;
+    final canEditDelete = !_isSyncing && status != 'syncing' && status != 'synced';
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -328,6 +520,8 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
+            _buildSyncStatusChip(status),
+            const SizedBox(height: 10),
             Text('Correo: ${emergency.clientEmail}'),
             Text('Vehículo: ${emergency.vehicleBrand} ${emergency.vehicleModel}'),
             Text('Placa: ${emergency.vehiclePlate}'),
@@ -339,44 +533,94 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
             Text(
               'Creada: ${DateFormat('dd/MM/yyyy HH:mm').format(emergency.createdOfflineAt.toLocal())}',
             ),
+            if (emergency.backendIncidentId != null)
+              Text('Incident ID backend: ${emergency.backendIncidentId}'),
+            if (emergency.lastError != null && emergency.lastError!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                emergency.lastError!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ],
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _populateForm(emergency);
-                      setState(() => _isEditing = true);
-                    },
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Editar emergencia'),
-                  ),
+            if (status == 'pending')
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isSyncing ? null : () => _syncEmergency(manual: true),
+                  icon: _isSyncing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync_outlined),
+                  label: const Text('Sincronizar ahora'),
                 ),
-              ],
+              ),
+            if (status == 'failed')
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isSyncing ? null : () => _syncEmergency(manual: true),
+                  icon: _isSyncing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_outlined),
+                  label: const Text('Reintentar sincronización'),
+                ),
+              ),
+            if (status == 'syncing')
+              const SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
+            if (status == 'synced')
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _clearSyncedRecord,
+                  icon: const Icon(Icons.cleaning_services_outlined),
+                  label: const Text('Limpiar registro local'),
+                ),
+              ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: canEditDelete
+                    ? () {
+                        _populateForm(emergency);
+                        setState(() => _isEditing = true);
+                      }
+                    : null,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Editar emergencia'),
+              ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _deleteEmergencyLocal,
-                    icon: const Icon(Icons.delete_outline),
-                    label: const Text('Eliminar emergencia local'),
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: canEditDelete ? _deleteEmergencyLocal : null,
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Eliminar emergencia local'),
+              ),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: null,
-                    icon: const Icon(Icons.sync_outlined),
-                    label: const Text('La sincronización se implementará en la siguiente fase'),
-                  ),
-                ),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_outlined),
+                label: Text(status == 'synced' ? 'Volver al login' : 'Volver al login'),
+              ),
             ),
           ],
         ),
@@ -534,9 +778,9 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
           ElevatedButton.icon(
             onPressed: _handleSaveOffline,
             icon: const Icon(Icons.save_outlined),
-            label: Text(_isEditing
-                ? 'Actualizar emergencia offline'
-                : 'Guardar emergencia offline'),
+            label: Text(
+              _isEditing ? 'Actualizar emergencia offline' : 'Guardar emergencia offline',
+            ),
           ),
           if (_isEditing) ...[
             const SizedBox(height: 10),
@@ -562,9 +806,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showActiveBlock = !_isEditing &&
-        _activeEmergency != null &&
-        _isActiveStatus(_activeEmergency!.syncStatus);
+    final showCard = !_isEditing && _activeEmergency != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -577,8 +819,8 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (showActiveBlock) _buildActiveEmergencyCard(_activeEmergency!),
-                  if (!showActiveBlock) _buildForm(),
+                  if (showCard) _buildEmergencyCard(_activeEmergency!),
+                  if (!showCard) _buildForm(),
                 ],
               ),
             ),
