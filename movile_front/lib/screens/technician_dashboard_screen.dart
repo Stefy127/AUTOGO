@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -11,13 +14,16 @@ class TechnicianDashboardScreen extends StatefulWidget {
   const TechnicianDashboardScreen({super.key});
 
   @override
-  State<TechnicianDashboardScreen> createState() => _TechnicianDashboardScreenState();
+  State<TechnicianDashboardScreen> createState() =>
+      _TechnicianDashboardScreenState();
 }
 
 class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   bool _loading = true;
   String? _error;
   List<Incident> _incidents = [];
+  Timer? _locationTimer;
+  bool _sendingLocation = false;
 
   @override
   void initState() {
@@ -40,6 +46,7 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
         _incidents = incidents;
         _loading = false;
       });
+      _syncLocationTracking();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -51,11 +58,120 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
 
   Incident? get _activeIncident {
     for (final incident in _incidents) {
-      if (incident.status == 'accepted' || incident.status == 'assigned' || incident.status == 'in_progress') {
+      if (incident.status == 'accepted' ||
+          incident.status == 'assigned' ||
+          incident.status == 'on_route' ||
+          incident.status == 'in_service' ||
+          incident.status == 'in_progress') {
         return incident;
       }
     }
     return _incidents.isNotEmpty ? _incidents.first : null;
+  }
+
+  bool get _isTrackingIncident {
+    final active = _activeIncident;
+    return active != null && active.status == 'on_route';
+  }
+
+  void _syncLocationTracking() {
+    if (_isTrackingIncident) {
+      _startLocationTracking();
+    } else {
+      _stopLocationTracking();
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopLocationTracking();
+    super.dispose();
+  }
+
+  void _startLocationTracking() {
+    _locationTimer?.cancel();
+    _locationTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _sendCurrentLocation();
+    });
+    _sendCurrentLocation();
+  }
+
+  void _stopLocationTracking() {
+    _locationTimer?.cancel();
+    _locationTimer = null;
+  }
+
+  Future<Position?> _getCurrentPosition() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Los servicios de ubicación están desactivados');
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      throw Exception('Permiso de ubicación denegado');
+    }
+
+    return Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high);
+  }
+
+  Future<void> _sendCurrentLocation({bool showFeedback = false}) async {
+    if (_sendingLocation || !_isTrackingIncident) {
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No hay tracking activo o ya se está enviando')));
+      }
+      return;
+    }
+
+    final active = _activeIncident;
+    if (active == null) {
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No hay incidente activo')));
+      }
+      return;
+    }
+
+    _sendingLocation = true;
+    try {
+      final position = await _getCurrentPosition();
+      if (position == null) {
+        if (showFeedback) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No se pudo obtener la ubicación')));
+        }
+        return;
+      }
+      final service =
+          Provider.of<TechnicianAccessService>(context, listen: false);
+      final resp = await service.updateLocation(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      // Log for debugging: qué coordenadas obtuvo el dispositivo y qué respondió el backend
+      debugPrint('DEBUG: Sent location -> ${position.latitude}, ${position.longitude}');
+      debugPrint('DEBUG: Backend response -> $resp');
+      if (!mounted) return;
+      setState(() {});
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Ubicación enviada: ${position.latitude}, ${position.longitude}')));
+      }
+    } catch (e) {
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error enviando ubicación: $e')));
+      }
+    } finally {
+      _sendingLocation = false;
+    }
   }
 
   Widget _buildQrImage(String qrUrl) {
@@ -88,7 +204,8 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   }
 
   Future<void> _updateStatus(Incident incident, String newStatus) async {
-    final service = Provider.of<TechnicianAccessService>(context, listen: false);
+    final service =
+        Provider.of<TechnicianAccessService>(context, listen: false);
 
     try {
       await service.updateIncidentStatus(incident.id!, newStatus);
@@ -96,12 +213,16 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
       await _loadIncidents();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Estado actualizado a $newStatus'), backgroundColor: Colors.green),
+        SnackBar(
+            content: Text('Estado actualizado a $newStatus'),
+            backgroundColor: Colors.green),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo actualizar estado: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('No se pudo actualizar estado: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
@@ -133,29 +254,36 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
     if (!mounted) return;
     if (method == null) return;
 
-    final service = Provider.of<TechnicianAccessService>(context, listen: false);
+    final service =
+        Provider.of<TechnicianAccessService>(context, listen: false);
     try {
       if (method == 'qr') {
-        final shouldContinue = await _showQrPaymentDialog(incident.id!, service);
+        final shouldContinue =
+            await _showQrPaymentDialog(incident.id!, service);
         if (!mounted || !shouldContinue) return;
       }
 
-      await service.confirmPayment(incidentId: incident.id!, paymentMethod: method);
+      await service.confirmPayment(
+          incidentId: incident.id!, paymentMethod: method);
       if (!mounted) return;
       await _loadIncidents();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pago confirmado'), backgroundColor: Colors.green),
+        const SnackBar(
+            content: Text('Pago confirmado'), backgroundColor: Colors.green),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo confirmar pago: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('No se pudo confirmar pago: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
 
-  Future<bool> _showQrPaymentDialog(int incidentId, TechnicianAccessService service) async {
+  Future<bool> _showQrPaymentDialog(
+      int incidentId, TechnicianAccessService service) async {
     final messenger = ScaffoldMessenger.of(context);
     String qrUrl = '';
 
@@ -164,7 +292,9 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
     } catch (e) {
       if (!mounted) return false;
       messenger.showSnackBar(
-        SnackBar(content: Text('No se pudo obtener el QR del taller: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('No se pudo obtener el QR del taller: $e'),
+            backgroundColor: Colors.red),
       );
       return false;
     }
@@ -172,7 +302,9 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
     if (!mounted) return false;
     if (qrUrl.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('El taller no tiene QR configurado'), backgroundColor: Colors.orange),
+        const SnackBar(
+            content: Text('El taller no tiene QR configurado'),
+            backgroundColor: Colors.orange),
       );
       return false;
     }
@@ -185,7 +317,8 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Muestra esta imagen al cliente para escanear y pagar:'),
+              const Text(
+                  'Muestra esta imagen al cliente para escanear y pagar:'),
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -217,7 +350,9 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
 
     if (lat == null || lng == null) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Ubicación no disponible'), backgroundColor: Colors.orange),
+        const SnackBar(
+            content: Text('Ubicación no disponible'),
+            backgroundColor: Colors.orange),
       );
       return;
     }
@@ -225,13 +360,16 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
     final url = Uri.parse('https://www.google.com/maps?q=$lat,$lng');
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir Google Maps'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('No se pudo abrir Google Maps'),
+            backgroundColor: Colors.red),
       );
     }
   }
 
   Future<void> _logout() async {
-    final service = Provider.of<TechnicianAccessService>(context, listen: false);
+    final service =
+        Provider.of<TechnicianAccessService>(context, listen: false);
     await service.logout();
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/technician/access');
@@ -270,9 +408,19 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Mecánico: ${service.technicianName ?? '-'}',
-                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text('Taller: ${service.workshopName ?? '-'}'),
+                          if (_isTrackingIncident) ...[
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Tracking activo en tiempo real',
+                              style: TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -285,14 +433,16 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
                         color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+                      child: Text(_error!,
+                          style: TextStyle(color: Colors.red.shade700)),
                     ),
                   const SizedBox(height: 12),
                   if (active == null)
                     const Card(
                       child: Padding(
                         padding: EdgeInsets.all(16),
-                        child: Text('No tienes emergencias asignadas actualmente.'),
+                        child: Text(
+                            'No tienes emergencias asignadas actualmente.'),
                       ),
                     )
                   else
@@ -303,33 +453,57 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Emergencia #${active.id}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 18)),
                             const SizedBox(height: 8),
                             Text('Estado: ${active.status}'),
                             Text('Prioridad: ${active.priority}'),
                             Text('Descripción: ${active.description}'),
-                            if (active.user != null) Text('Cliente: ${active.user!.fullName}'),
-                            if (active.locationText != null) Text('Ubicación: ${active.locationText}'),
+                            if (active.remainingDistanceMeters != null)
+                              Text(
+                                  'Distancia restante: ${active.remainingDistanceMeters} m'),
+                            if (active.estimatedArrivalTime != null)
+                              Text(
+                                  'ETA: ${DateFormat('HH:mm').format(active.estimatedArrivalTime!)}'),
+                            if (active.user != null)
+                              Text('Cliente: ${active.user!.fullName}'),
+                            if (active.locationText != null)
+                              Text('Ubicación: ${active.locationText}'),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: (active.latitude != null &&
+                                        active.longitude != null)
+                                    ? () => _openLocation(active)
+                                    : null,
+                                icon: const Icon(Icons.map_outlined),
+                                label: const Text('Ir a ubicación del cliente'),
+                              ),
+                            ),
                             const SizedBox(height: 14),
                             Row(
                               children: [
                                 Expanded(
                                   child: ElevatedButton.icon(
-                                    onPressed: (active.status == 'assigned' || active.status == 'accepted')
-                                        ? () => _updateStatus(active, 'in_progress')
+                                    onPressed: (active.status == 'assigned' ||
+                                            active.status == 'accepted')
+                                        ? () =>
+                                            _updateStatus(active, 'on_route')
                                         : null,
-                                    icon: const Icon(Icons.play_arrow),
-                                    label: const Text('Iniciar servicio'),
+                                    icon: const Icon(Icons.alt_route),
+                                    label: const Text('Iniciar recorrido'),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: ElevatedButton.icon(
-                                    onPressed: active.status == 'in_progress'
-                                        ? () => _updateStatus(active, 'completed')
+                                    onPressed: active.status == 'on_route'
+                                        ? () =>
+                                            _updateStatus(active, 'in_service')
                                         : null,
-                                    icon: const Icon(Icons.check_circle),
-                                    label: const Text('Finalizar servicio'),
+                                    icon: const Icon(Icons.play_circle),
+                                    label: const Text('Iniciar atención'),
                                   ),
                                 ),
                               ],
@@ -339,23 +513,43 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
                               children: [
                                 Expanded(
                                   child: OutlinedButton.icon(
-                                    onPressed: active.status == 'completed'
-                                        ? () => _confirmPayment(active)
+                                    onPressed: active.status == 'in_service'
+                                        ? () =>
+                                            _updateStatus(active, 'completed')
                                         : null,
-                                    icon: const Icon(Icons.payments_outlined),
-                                    label: const Text('Confirmar pago'),
+                                    icon:
+                                        const Icon(Icons.check_circle_outline),
+                                    label: const Text('Finalizar servicio'),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: OutlinedButton.icon(
-                                    onPressed: () => _openLocation(active),
-                                    icon: const Icon(Icons.map_outlined),
-                                    label: const Text('Ver ubicación'),
+                                    onPressed: active.status == 'in_service' ||
+                                            active.status == 'on_route'
+                                        ? () =>
+                                            _updateStatus(active, 'cancelled')
+                                        : null,
+                                    icon: const Icon(Icons.cancel_outlined),
+                                    label: const Text(
+                                        'Cancelar / No pude atender'),
                                   ),
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 8),
+                            if (active.status == 'completed')
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _confirmPayment(active),
+                                      icon: const Icon(Icons.payments_outlined),
+                                      label: const Text('Confirmar pago'),
+                                    ),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       ),
