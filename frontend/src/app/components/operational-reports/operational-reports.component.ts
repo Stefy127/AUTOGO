@@ -2,12 +2,15 @@
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ReportsService } from '../../services/reports.service';
+import { WorkshopService } from '../../services/workshop.service';
 import {
+  AppNotification,
   OperationalReportItem,
   OperationalReportRequest,
   OperationalReportResponse,
   OperationalReportSummary,
-  User
+  User,
+  Workshop,
 } from '../../models/models';
 
 @Component({
@@ -17,12 +20,16 @@ import {
 })
 export class OperationalReportsComponent implements OnInit {
   currentUser: User | null = null;
+  workshop: Workshop | null = null;
   sidebarOpen = true;
   loading = false;
   exportingPdf = false;
   exportingExcel = false;
   error = '';
   successMessage = '';
+
+  notifications: AppNotification[] = [];
+  unreadNotificationsCount = 0;
 
   report: OperationalReportResponse | null = null;
   items: OperationalReportItem[] = [];
@@ -59,6 +66,7 @@ export class OperationalReportsComponent implements OnInit {
   constructor(
     private authService: AuthService,
     private reportsService: ReportsService,
+    private workshopService: WorkshopService,
     private router: Router
   ) {}
 
@@ -69,6 +77,10 @@ export class OperationalReportsComponent implements OnInit {
       if (user && user.role !== 'admin' && user.role !== 'workshop') {
         this.router.navigate(['/dashboard']);
       }
+      if (user?.role === 'workshop') {
+        this.loadWorkshopProfile();
+        this.loadWorkshopNotifications();
+      }
     });
   }
 
@@ -78,6 +90,10 @@ export class OperationalReportsComponent implements OnInit {
 
   isWorkshop(): boolean {
     return this.currentUser?.role === 'workshop';
+  }
+
+  get workshopName(): string {
+    return this.workshop?.name || 'Mi Taller';
   }
 
   get roleDescription(): string {
@@ -223,6 +239,49 @@ export class OperationalReportsComponent implements OnInit {
   logout(): void {
     this.authService.logout();
     this.router.navigate(['/login']);
+  }
+
+  deleteMyAccount(): void {
+    const ok = confirm('¿Seguro que deseas eliminar tu cuenta? Esta acción no se puede deshacer.');
+    if (!ok) return;
+
+    this.authService.deleteMyAccount().subscribe({
+      next: () => {
+        this.authService.logout();
+        this.router.navigate(['/login']);
+      },
+      error: () => {
+        this.error = 'No se pudo eliminar la cuenta.';
+      }
+    });
+  }
+
+  goWorkshopView(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications'): void {
+    this.router.navigate(['/workshop'], { queryParams: { view } });
+  }
+
+  private loadWorkshopProfile(): void {
+    this.workshopService.getMyWorkshop().subscribe({
+      next: (workshop) => {
+        this.workshop = workshop;
+      },
+      error: () => {
+        this.workshop = null;
+      }
+    });
+  }
+
+  private loadWorkshopNotifications(): void {
+    this.workshopService.getNotifications(true, 100).subscribe({
+      next: (notifications) => {
+        this.notifications = notifications;
+        this.unreadNotificationsCount = notifications.filter(n => !n.is_read).length;
+      },
+      error: () => {
+        this.notifications = [];
+        this.unreadNotificationsCount = 0;
+      }
+    });
   }
 
   private downloadBlob(blob: Blob, filename: string): void {

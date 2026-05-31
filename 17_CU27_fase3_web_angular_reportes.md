@@ -144,5 +144,10 @@ No requiere consulta previa para exportar.
   - Alquiler de Autos
   - Bitácora
 - En workshop también queda visible desde su menú del panel.
+- En workshop el sidebar de reportes ahora reutiliza la estructura real del panel (nombre del taller + opciones completas del menú), no un sidebar simplificado.
+- Se agregó `Notificaciones` en el sidebar workshop de reportes con badge rojo de no leídas.
+- Se ajustaron clases CSS para mantener fondo azul oscuro, opciones transparentes y activo morado, evitando botones/tarjetas blancas en el menú lateral.
+- En admin el sidebar de reportes mantiene las mismas opciones visuales del panel admin y marca `Reportes Operacionales` como activo.
+- Se corrigieron caracteres corruptos (mojibake) en textos e íconos del módulo de reportes (`Método`, `Técnico`, `Sesión`, emojis del menú), preservando el diseño real del sidebar admin/taller.
 - La pantalla `/reports/operational` ya no depende de navegación por botón “Volver” como único flujo.
 - Cliente sigue sin acceso funcional desde Angular (sin enlace y con redirección por rol en el componente).

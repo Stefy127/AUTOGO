@@ -88,3 +88,150 @@
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 13px; padding: 10px 8px; color: #334155; }
 th { color: #0f172a; font-weight: 700; background: #f8fafc; }
+
+/* Workshop layout parity with workshop dashboard */
+.workshop-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f5f7fa;
+}
+
+.workshop-layout .sidebar {
+  width: 280px;
+  position: fixed;
+  height: 100vh;
+  left: 0;
+  top: 0;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  transition: width 0.3s ease, transform 0.3s ease;
+}
+
+.workshop-layout .sidebar.closed {
+  width: 88px;
+}
+
+.workshop-layout .sidebar-header {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.workshop-layout .sidebar-header .logo {
+  display: block;
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.workshop-layout .sidebar-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.workshop-layout .sidebar-header .subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.workshop-layout .sidebar-nav {
+  padding: 16px 12px;
+}
+
+.workshop-layout .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  width: 100%;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.7);
+  border: none;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  text-align: left;
+  border-left: none;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.workshop-layout .nav-item .icon {
+  font-size: 20px;
+}
+
+.workshop-layout .nav-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff;
+  transform: translateX(4px);
+  border-left: none;
+}
+
+.workshop-layout .nav-item.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  border-left: none;
+}
+
+.workshop-layout .badge-count {
+  margin-left: auto;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.workshop-layout .sidebar-footer {
+  padding: 16px;
+}
+
+.btn-delete-account {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #fecaca;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.workshop-layout .btn-logout {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.workshop-layout .main-content {
+  margin-left: 280px;
+  min-height: 100vh;
+  padding: 32px 40px;
+  background: #f5f7fa;
+}
+
+.workshop-layout .main-content.expanded {
+  margin-left: 88px;
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.sidebar-toggle-btn {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #334155;
+}

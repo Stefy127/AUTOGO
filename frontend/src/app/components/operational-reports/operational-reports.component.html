@@ -1,16 +1,26 @@
-﻿<div class="dashboard-container">
-  <aside class="sidebar" [class.closed]="!sidebarOpen">
-    <div class="sidebar-header">
+﻿<div [ngClass]="isWorkshop() ? 'workshop-layout' : 'dashboard-container'">
+  <aside class="sidebar" [class.closed]="!sidebarOpen" [class.open]="sidebarOpen">
+    <div class="sidebar-header" *ngIf="isAdmin()">
       <div class="logo">
         <span class="logo-icon">🚗</span>
-        <span class="logo-text" *ngIf="sidebarOpen">{{ isWorkshop() ? 'AutoGo Taller' : 'AutoGo Admin' }}</span>
+        <span class="logo-text" *ngIf="sidebarOpen">AutoGo</span>
       </div>
+    </div>
+
+    <div class="sidebar-header" *ngIf="isWorkshop()">
+      <div class="logo">🔧</div>
+      <h2>{{ workshopName }}</h2>
+      <p class="subtitle">Panel de Control</p>
     </div>
 
     <nav class="sidebar-nav" *ngIf="isAdmin()">
       <a class="nav-item" routerLink="/dashboard">
         <span class="nav-icon">📊</span>
         <span class="nav-text" *ngIf="sidebarOpen">Dashboard</span>
+      </a>
+      <a class="nav-item">
+        <span class="nav-icon">🚨</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Emergencias</span>
       </a>
       <a class="nav-item" routerLink="/admin/gestion-talleres">
         <span class="nav-icon">🔧</span>
@@ -35,22 +45,47 @@
     </nav>
 
     <nav class="sidebar-nav" *ngIf="isWorkshop()">
-      <a class="nav-item" routerLink="/workshop">
-        <span class="nav-icon">📊</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Dashboard</span>
-      </a>
-      <a class="nav-item active" routerLink="/reports/operational">
-        <span class="nav-icon">📈</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Reportes Operacionales</span>
-      </a>
+      <button class="nav-item" (click)="goWorkshopView('dashboard')">
+        <span class="icon">📊</span>
+        <span *ngIf="sidebarOpen">Dashboard</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('edit-info')">
+        <span class="icon">⚙️</span>
+        <span *ngIf="sidebarOpen">Editar Información</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('add-technician')">
+        <span class="icon">👨‍🔧</span>
+        <span *ngIf="sidebarOpen">Agregar Mecánico</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('incidents-available')">
+        <span class="icon">🆕</span>
+        <span *ngIf="sidebarOpen">Emergencias Disponibles</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('incidents-history')">
+        <span class="icon">📜</span>
+        <span *ngIf="sidebarOpen">Historial</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('reports')">
+        <span class="icon">🧾</span>
+        <span *ngIf="sidebarOpen">Reporte</span>
+      </button>
+      <button class="nav-item active">
+        <span class="icon">📈</span>
+        <span *ngIf="sidebarOpen">Reportes Operacionales</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('notifications')">
+        <span class="icon">🔔</span>
+        <span *ngIf="sidebarOpen">Notificaciones</span>
+        <span class="badge-count" *ngIf="unreadNotificationsCount > 0">{{ unreadNotificationsCount }}</span>
+      </button>
     </nav>
 
-    <div class="sidebar-footer">
+    <div class="sidebar-footer" *ngIf="isAdmin()">
       <div class="user-profile" *ngIf="currentUser">
         <div class="user-avatar">{{ currentUser.full_name.charAt(0).toUpperCase() }}</div>
         <div class="user-info" *ngIf="sidebarOpen">
           <div class="user-name">{{ currentUser.full_name }}</div>
-          <div class="user-role">{{ currentUser.role === 'workshop' ? 'Taller' : 'Administrador' }}</div>
+          <div class="user-role">Administrador</div>
         </div>
       </div>
       <button class="btn-logout" (click)="logout()" [title]="sidebarOpen ? '' : 'Cerrar Sesión'">
@@ -58,13 +93,23 @@
         <span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesión</span>
       </button>
     </div>
+
+    <div class="sidebar-footer" *ngIf="isWorkshop()">
+      <button class="btn-delete-account" (click)="deleteMyAccount()">🗑️ Eliminar Cuenta</button>
+      <button class="btn-logout" (click)="logout()">🚪 Cerrar Sesión</button>
+    </div>
   </aside>
 
   <main class="main-content" [class.expanded]="!sidebarOpen">
-    <header class="top-bar">
+    <header class="top-bar" *ngIf="isAdmin()">
       <button class="btn-toggle" (click)="toggleSidebar()">☰</button>
       <h1 class="page-title">Reportes Operacionales</h1>
       <div class="spacer"></div>
+    </header>
+
+    <header class="content-header" *ngIf="isWorkshop()">
+      <button class="sidebar-toggle-btn" (click)="toggleSidebar()">☰</button>
+      <h1>Reportes Operacionales</h1>
     </header>
 
     <div class="reports-page">
@@ -194,3 +239,4 @@
     </div>
   </main>
 </div>
+

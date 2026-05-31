@@ -14,6 +14,7 @@ import 'screens/technician_dashboard_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/payment_success_screen.dart';
 import 'screens/emergency_offline_screen.dart';
+import 'screens/client_reports_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_service.dart';
 import 'services/technician_access_service.dart';
@@ -124,6 +125,7 @@ class MyApp extends StatelessWidget {
           '/payment-success': (context) => const PaymentSuccessScreen(),
           '/payment-cancel': (context) => const EmergencyListScreen(),
           '/emergency-offline': (context) => const EmergencyOfflineScreen(),
+          '/client-reports': (context) => const ClientReportsScreen(),
         },
       ),
     );
