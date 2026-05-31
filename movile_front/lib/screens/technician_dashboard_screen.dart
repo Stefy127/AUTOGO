@@ -124,7 +124,8 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   Future<void> _sendCurrentLocation({bool showFeedback = false}) async {
     if (_sendingLocation || !_isTrackingIncident) {
       if (showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(const SnackBar(
             content: Text('No hay tracking activo o ya se está enviando')));
       }
       return;
@@ -133,24 +134,29 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
     final active = _activeIncident;
     if (active == null) {
       if (showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
             const SnackBar(content: Text('No hay incidente activo')));
       }
       return;
     }
 
     _sendingLocation = true;
+    // Capture context-related objects before any `await` to avoid
+    // `use_build_context_synchronously` lints.
+    final messenger = ScaffoldMessenger.of(context);
+    final service =
+        Provider.of<TechnicianAccessService>(context, listen: false);
+
     try {
       final position = await _getCurrentPosition();
       if (position == null) {
         if (showFeedback) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          messenger.showSnackBar(
               const SnackBar(content: Text('No se pudo obtener la ubicación')));
         }
         return;
       }
-      final service =
-          Provider.of<TechnicianAccessService>(context, listen: false);
       final resp = await service.updateLocation(
         latitude: position.latitude,
         longitude: position.longitude,
@@ -161,12 +167,12 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
       if (!mounted) return;
       setState(() {});
       if (showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Ubicación enviada: ${position.latitude}, ${position.longitude}')));
+        messenger.showSnackBar(SnackBar(
+            content: Text('Ubicación enviada: ${position.latitude}, ${position.longitude}')));
       }
     } catch (e) {
       if (showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
             SnackBar(content: Text('Error enviando ubicación: $e')));
       }
     } finally {
@@ -204,6 +210,7 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   }
 
   Future<void> _updateStatus(Incident incident, String newStatus) async {
+    final messenger = ScaffoldMessenger.of(context);
     final service =
         Provider.of<TechnicianAccessService>(context, listen: false);
 
@@ -212,14 +219,14 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
       if (!mounted) return;
       await _loadIncidents();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
             content: Text('Estado actualizado a $newStatus'),
             backgroundColor: Colors.green),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
             content: Text('No se pudo actualizar estado: $e'),
             backgroundColor: Colors.red),
@@ -228,6 +235,9 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   }
 
   Future<void> _confirmPayment(Incident incident) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final service =
+        Provider.of<TechnicianAccessService>(context, listen: false);
     final method = await showModalBottomSheet<String>(
       context: context,
       builder: (context) {
@@ -253,9 +263,6 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
 
     if (!mounted) return;
     if (method == null) return;
-
-    final service =
-        Provider.of<TechnicianAccessService>(context, listen: false);
     try {
       if (method == 'qr') {
         final shouldContinue =
@@ -268,13 +275,13 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
       if (!mounted) return;
       await _loadIncidents();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
             content: Text('Pago confirmado'), backgroundColor: Colors.green),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
             content: Text('No se pudo confirmar pago: $e'),
             backgroundColor: Colors.red),
@@ -368,11 +375,12 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   }
 
   Future<void> _logout() async {
+    final navigator = Navigator.of(context);
     final service =
         Provider.of<TechnicianAccessService>(context, listen: false);
     await service.logout();
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/technician/access');
+    navigator.pushReplacementNamed('/technician/access');
   }
 
   @override
