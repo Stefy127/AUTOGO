@@ -25,6 +25,7 @@ dependencies:
   path_provider: ^2.1.2
   http_parser: ^4.0.2
   flutter_local_notifications: ^17.2.3
+  speech_to_text: ^6.6.2
 
 dev_dependencies:
   flutter_test:

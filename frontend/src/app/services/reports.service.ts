@@ -2,7 +2,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { OperationalReportRequest, OperationalReportResponse } from '../models/models';
+import {
+  OperationalReportRequest,
+  OperationalReportResponse,
+  VoiceReportParseRequest,
+  VoiceReportParseResponse,
+} from '../models/models';
 
 @Injectable({
   providedIn: 'root'
@@ -26,5 +31,9 @@ export class ReportsService {
     return this.http.post(`${this.apiUrl}/export/excel`, payload, {
       responseType: 'blob'
     });
+  }
+
+  voiceParse(payload: VoiceReportParseRequest): Observable<VoiceReportParseResponse> {
+    return this.http.post<VoiceReportParseResponse>(`${this.apiUrl}/voice-parse`, payload);
   }
 }

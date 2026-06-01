@@ -524,6 +524,17 @@ class OperationalReportResponse(BaseModel):
     items: list[OperationalReportItem]
 
 
+class VoiceReportParseRequest(BaseModel):
+    text: str
+
+
+class VoiceReportParseResponse(BaseModel):
+    recognized_text: str
+    filters: OperationalReportRequest
+    action: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
+
+
 class OfflineIncidentSyncResponse(BaseModel):
     incident: IncidentResponse
     created: bool

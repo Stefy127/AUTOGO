@@ -52,6 +52,27 @@ class ReportsService {
     );
   }
 
+  Future<VoiceReportParseResponse> voiceParse({
+    required String token,
+    required String text,
+  }) async {
+    final url = Uri.parse('${ApiService.baseUrl}/reports/operational/voice-parse');
+    final response = await http
+        .post(
+          url,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'text': text}),
+        )
+        .timeout(_timeout);
+
+    _throwIfError(response);
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return VoiceReportParseResponse.fromJson(json);
+  }
+
   Future<Uint8List> _exportBinary({
     required String token,
     required OperationalReportRequest payload,

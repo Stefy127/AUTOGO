@@ -1,5 +1,6 @@
-﻿import { Component, OnInit } from '@angular/core';
+﻿import { Component, NgZone, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 import { ReportsService } from '../../services/reports.service';
 import { WorkshopService } from '../../services/workshop.service';
@@ -10,6 +11,7 @@ import {
   OperationalReportResponse,
   OperationalReportSummary,
   User,
+  VoiceReportParseResponse,
   Workshop,
 } from '../../models/models';
 
@@ -19,6 +21,11 @@ import {
   styleUrls: ['./operational-reports.component.css']
 })
 export class OperationalReportsComponent implements OnInit {
+  private recognition: any = null;
+  private voiceSessionId = 0;
+  private voiceHadResult = false;
+  private voiceTimeout: any = null;
+
   currentUser: User | null = null;
   workshop: Workshop | null = null;
   sidebarOpen = true;
@@ -27,6 +34,16 @@ export class OperationalReportsComponent implements OnInit {
   exportingExcel = false;
   error = '';
   successMessage = '';
+
+  voiceSupported = false;
+  voiceListening = false;
+  voiceProcessing = false;
+  voiceError: string | null = null;
+  lastVoiceErrorRaw: string | null = null;
+  recognizedVoiceText: string | null = null;
+  voiceWarnings: string[] = [];
+  typedCommand = '';
+  commandProcessing = false;
 
   notifications: AppNotification[] = [];
   unreadNotificationsCount = 0;
@@ -61,13 +78,15 @@ export class OperationalReportsComponent implements OnInit {
     workshop_id: undefined as number | undefined,
     technician_id: undefined as number | undefined,
     client_id: undefined as number | undefined,
+    vehicle_id: undefined as number | undefined,
   };
 
   constructor(
     private authService: AuthService,
     private reportsService: ReportsService,
     private workshopService: WorkshopService,
-    private router: Router
+    private router: Router,
+    private ngZone: NgZone
   ) {}
 
   ngOnInit(): void {
@@ -82,6 +101,7 @@ export class OperationalReportsComponent implements OnInit {
         this.loadWorkshopNotifications();
       }
     });
+    this.initVoiceSupport();
   }
 
   isAdmin(): boolean {
@@ -121,24 +141,47 @@ export class OperationalReportsComponent implements OnInit {
   }
 
   buildPayload(): OperationalReportRequest {
+    const toPositiveIntOrUndefined = (value: unknown): number | undefined => {
+      if (value === null || value === undefined || value === '') return undefined;
+      const num = Number(value);
+      return Number.isInteger(num) && num > 0 ? num : undefined;
+    };
+
+    const technicianId = toPositiveIntOrUndefined(this.filters.technician_id);
+    const vehicleId = toPositiveIntOrUndefined(this.filters.vehicle_id);
+    const workshopId = toPositiveIntOrUndefined(this.filters.workshop_id);
+    const clientId = toPositiveIntOrUndefined(this.filters.client_id);
+
+    if (
+      (this.filters.technician_id !== undefined && technicianId === undefined) ||
+      (this.filters.vehicle_id !== undefined && vehicleId === undefined) ||
+      (this.isAdmin() && this.filters.workshop_id !== undefined && workshopId === undefined) ||
+      (this.isAdmin() && this.filters.client_id !== undefined && clientId === undefined)
+    ) {
+      this.error = 'Los filtros por ID deben ser enteros positivos mayores a 0.';
+    }
+
     const payload: OperationalReportRequest = {
       start_date: this.filters.start_date || undefined,
       end_date: this.filters.end_date || undefined,
       incident_type: this.filters.incident_type.trim() || undefined,
       status: this.filters.status || undefined,
       payment_method: (this.filters.payment_method || undefined) as OperationalReportRequest['payment_method'],
-      technician_id: this.filters.technician_id,
+      technician_id: technicianId,
+      vehicle_id: vehicleId,
     };
 
     if (this.isAdmin()) {
-      payload.workshop_id = this.filters.workshop_id;
-      payload.client_id = this.filters.client_id;
+      payload.workshop_id = workshopId;
+      payload.client_id = clientId;
     }
+
+    console.log('report payload:', payload);
 
     return payload;
   }
 
-  queryReports(): void {
+  queryReports(onDone?: () => void): void {
     this.loading = true;
     this.error = '';
     this.successMessage = '';
@@ -148,10 +191,12 @@ export class OperationalReportsComponent implements OnInit {
         this.report = response;
         this.items = response.items || [];
         this.loading = false;
+        onDone?.();
       },
       error: (err) => {
         this.error = err?.error?.detail || 'No se pudo consultar el reporte operacional.';
         this.loading = false;
+        onDone?.();
       }
     });
   }
@@ -166,6 +211,7 @@ export class OperationalReportsComponent implements OnInit {
       workshop_id: undefined,
       technician_id: undefined,
       client_id: undefined,
+      vehicle_id: undefined,
     };
     this.report = null;
     this.items = [];
@@ -173,7 +219,7 @@ export class OperationalReportsComponent implements OnInit {
     this.successMessage = '';
   }
 
-  exportPdf(): void {
+  exportPdf(onDone?: () => void): void {
     this.exportingPdf = true;
     this.error = '';
 
@@ -183,15 +229,17 @@ export class OperationalReportsComponent implements OnInit {
         this.exportingPdf = false;
         this.successMessage = 'Reporte PDF descargado correctamente.';
         setTimeout(() => this.successMessage = '', 3000);
+        onDone?.();
       },
       error: (err) => {
         this.error = err?.error?.detail || 'No se pudo descargar el PDF.';
         this.exportingPdf = false;
+        onDone?.();
       }
     });
   }
 
-  exportExcel(): void {
+  exportExcel(onDone?: () => void): void {
     this.exportingExcel = true;
     this.error = '';
 
@@ -201,12 +249,268 @@ export class OperationalReportsComponent implements OnInit {
         this.exportingExcel = false;
         this.successMessage = 'Reporte Excel descargado correctamente.';
         setTimeout(() => this.successMessage = '', 3000);
+        onDone?.();
       },
       error: (err) => {
         this.error = err?.error?.detail || 'No se pudo descargar el Excel.';
         this.exportingExcel = false;
+        onDone?.();
       }
     });
+  }
+
+  startVoiceCommand(): void {
+    if (!this.voiceSupported) {
+      this.voiceError = 'Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.';
+      return;
+    }
+
+    if (this.voiceListening || this.voiceProcessing) {
+      return;
+    }
+
+    const sessionId = ++this.voiceSessionId;
+    this.cleanupRecognition();
+
+    this.voiceListening = true;
+    this.voiceProcessing = false;
+    this.voiceError = null;
+    this.lastVoiceErrorRaw = null;
+    this.voiceHadResult = false;
+    this.recognizedVoiceText = null;
+    this.voiceWarnings = [];
+
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new Recognition();
+    this.recognition = recognition;
+
+    recognition.lang = 'es-ES';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      if (this.voiceSessionId !== sessionId) return;
+      this.ngZone.run(() => {
+        console.log('voice start');
+        this.voiceListening = true;
+        this.voiceProcessing = false;
+      });
+    };
+
+    recognition.onresult = (event: any) => {
+      if (this.voiceSessionId !== sessionId) return;
+      this.ngZone.run(async () => {
+        const text = event?.results?.[0]?.[0]?.transcript?.toString().trim() ?? '';
+        console.log('voice result:', text);
+        this.voiceHadResult = true;
+        this.voiceListening = false;
+        this.voiceProcessing = true;
+        this.recognizedVoiceText = text;
+        if (this.voiceTimeout) {
+          clearTimeout(this.voiceTimeout);
+          this.voiceTimeout = null;
+        }
+        await this.processReportCommand(text, sessionId);
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      if (this.voiceSessionId !== sessionId) return;
+      this.ngZone.run(() => {
+        const rawError = event?.error?.toString() ?? 'unknown';
+        console.log('voice error:', rawError);
+        this.lastVoiceErrorRaw = rawError;
+        if (this.voiceTimeout) {
+          clearTimeout(this.voiceTimeout);
+          this.voiceTimeout = null;
+        }
+
+        const hadResultOrProcessing = this.voiceHadResult || this.voiceProcessing;
+        this.voiceListening = false;
+        this.voiceProcessing = false;
+
+        if (rawError === 'aborted' && hadResultOrProcessing) {
+          this.cleanupRecognition();
+          return;
+        }
+
+        this.voiceError = this.mapSpeechError(rawError);
+        this.cleanupRecognition();
+      });
+    };
+
+    recognition.onend = () => {
+      if (this.voiceSessionId !== sessionId) return;
+      this.ngZone.run(() => {
+        console.log('voice end');
+        if (this.voiceTimeout) {
+          clearTimeout(this.voiceTimeout);
+          this.voiceTimeout = null;
+        }
+        if (!this.voiceProcessing) {
+          this.voiceListening = false;
+        }
+        this.cleanupRecognition();
+      });
+    };
+
+    this.voiceTimeout = setTimeout(() => {
+      if (this.voiceListening && !this.voiceProcessing && this.voiceSessionId === sessionId) {
+        try {
+          this.recognition?.stop();
+        } catch {}
+        this.ngZone.run(() => {
+          this.voiceListening = false;
+          this.voiceProcessing = false;
+          this.voiceError = 'No se recibió audio a tiempo. Intenta nuevamente.';
+          this.cleanupRecognition();
+        });
+      }
+    }, 12000);
+
+    recognition.start();
+  }
+
+  private initVoiceSupport(): void {
+    const SpeechRecognitionConstructor =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    this.voiceSupported = !!SpeechRecognitionConstructor;
+  }
+
+  async applyTypedCommand(): Promise<void> {
+    const text = (this.typedCommand || '').trim();
+    if (!text || this.commandProcessing || this.voiceProcessing || this.voiceListening) {
+      return;
+    }
+    const sessionId = ++this.voiceSessionId;
+    this.commandProcessing = true;
+    this.voiceError = null;
+    this.lastVoiceErrorRaw = null;
+    this.voiceWarnings = [];
+    this.recognizedVoiceText = null;
+
+    try {
+      await this.processReportCommand(text, sessionId);
+    } finally {
+      this.commandProcessing = false;
+    }
+  }
+
+  private async processReportCommand(text: string, sessionId: number): Promise<void> {
+    try {
+      const res = await firstValueFrom(this.reportsService.voiceParse({ text }));
+      if (this.voiceSessionId !== sessionId) return;
+      console.log('voice-parse response filters:', res.filters);
+
+      this.recognizedVoiceText = text;
+      this.applyVoiceFilters(res);
+      console.log('filters after applying command:', this.filters);
+      this.voiceWarnings = res.warnings || [];
+
+      if (res.action === 'query') {
+        const response = await firstValueFrom(this.reportsService.queryOperationalReport(this.buildPayload()));
+        if (this.voiceSessionId !== sessionId) return;
+        this.report = response;
+        this.items = response.items || [];
+      } else if (res.action === 'pdf') {
+        const blob = await firstValueFrom(this.reportsService.exportOperationalReportPdf(this.buildPayload()));
+        if (this.voiceSessionId !== sessionId) return;
+        this.downloadBlob(blob, 'reporte_operacional.pdf');
+      } else if (res.action === 'excel') {
+        const blob = await firstValueFrom(this.reportsService.exportOperationalReportExcel(this.buildPayload()));
+        if (this.voiceSessionId !== sessionId) return;
+        this.downloadBlob(blob, 'reporte_operacional.xlsx');
+      } else {
+        this.successMessage = 'Comando de voz aplicado. Revisa los filtros.';
+        setTimeout(() => (this.successMessage = ''), 3000);
+      }
+    } catch (err: any) {
+      if (this.voiceSessionId !== sessionId) return;
+      this.voiceError = err?.error?.detail || 'No se pudo procesar el comando de voz.';
+    } finally {
+      if (this.voiceSessionId === sessionId) {
+        this.voiceListening = false;
+        this.voiceProcessing = false;
+        this.cleanupRecognition();
+      }
+    }
+  }
+
+  private cleanupRecognition(): void {
+    if (this.voiceTimeout) {
+      clearTimeout(this.voiceTimeout);
+      this.voiceTimeout = null;
+    }
+
+    if (this.recognition) {
+      this.recognition.onstart = null;
+      this.recognition.onresult = null;
+      this.recognition.onerror = null;
+      this.recognition.onend = null;
+      this.recognition = null;
+    }
+  }
+
+  private mapSpeechError(error: string): string {
+    switch (error) {
+      case 'not-allowed':
+        return 'Permiso de micrófono denegado. Activa el micrófono para localhost.';
+      case 'service-not-allowed':
+        return 'El navegador bloqueó el servicio de reconocimiento de voz.';
+      case 'no-speech':
+        return 'No se detectó voz. Intenta hablar más cerca del micrófono.';
+      case 'audio-capture':
+        return 'No se encontró un micrófono disponible.';
+      case 'network':
+        return 'El servicio de reconocimiento de voz del navegador falló. Puedes reintentar o escribir el comando manualmente.';
+      case 'aborted':
+        return 'La escucha fue cancelada. Intenta nuevamente.';
+      case 'language-not-supported':
+        return 'El idioma de reconocimiento no está soportado.';
+      default:
+        return `No se pudo capturar la voz. Error: ${error}`;
+    }
+  }
+
+  private applyVoiceFilters(res: VoiceReportParseResponse): void {
+    const f = res.filters || {};
+    this.filters.start_date = (f.start_date || '').toString();
+    this.filters.end_date = (f.end_date || '').toString();
+    this.filters.incident_type = (f.incident_type || '').toString();
+    this.filters.status = (f.status || '').toString();
+    this.filters.payment_method = (f.payment_method || '').toString();
+
+    // IDs: mapear explícitamente con null/undefined-safe.
+    const toPositiveIntOrUndefined = (value: unknown): number | undefined => {
+      if (value === null || value === undefined || value === '') return undefined;
+      const num = Number(value);
+      return Number.isInteger(num) && num > 0 ? num : undefined;
+    };
+
+    const parsedTechnicianId = toPositiveIntOrUndefined(f.technician_id);
+    const parsedVehicleId = toPositiveIntOrUndefined(f.vehicle_id);
+    const parsedWorkshopId = toPositiveIntOrUndefined(f.workshop_id);
+    const parsedClientId = toPositiveIntOrUndefined(f.client_id);
+
+    if (parsedTechnicianId !== undefined) {
+      this.filters.technician_id = parsedTechnicianId;
+    }
+    if (parsedVehicleId !== undefined) {
+      this.filters.vehicle_id = parsedVehicleId;
+    }
+
+    if (this.isAdmin()) {
+      if (parsedWorkshopId !== undefined) {
+        this.filters.workshop_id = parsedWorkshopId;
+      }
+      if (parsedClientId !== undefined) {
+        this.filters.client_id = parsedClientId;
+      }
+    } else {
+      this.filters.workshop_id = undefined;
+      this.filters.client_id = undefined;
+    }
   }
 
   getStatusLabel(status: string): string {

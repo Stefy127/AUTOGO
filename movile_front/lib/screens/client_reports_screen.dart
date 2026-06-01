@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../models/report_models.dart';
 import '../services/auth_service.dart';
@@ -17,24 +18,43 @@ class ClientReportsScreen extends StatefulWidget {
 class _ClientReportsScreenState extends State<ClientReportsScreen> {
   final ReportsService _reportsService = ReportsService();
   final TextEditingController _incidentTypeController = TextEditingController();
+  final stt.SpeechToText _speechToText = stt.SpeechToText();
 
   String _status = '';
   String _paymentMethod = '';
+  int? _vehicleIdFilter;
   DateTime? _startDate;
   DateTime? _endDate;
 
   bool _loading = false;
   bool _exportingPdf = false;
   bool _exportingExcel = false;
+  bool _speechAvailable = false;
+  bool _isListening = false;
+  bool _isProcessingVoice = false;
+  String _recognizedText = '';
+  List<String> _voiceWarnings = [];
   String? _error;
 
   OperationalReportSummary _summary = OperationalReportSummary.empty();
   List<OperationalReportItem> _items = [];
 
   @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  @override
   void dispose() {
     _incidentTypeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speechToText.initialize();
+    if (!mounted) return;
+    setState(() => _speechAvailable = available);
   }
 
   OperationalReportRequest _buildPayload() {
@@ -44,6 +64,7 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
       endDate: _endDate != null ? dateFormat.format(_endDate!) : null,
       incidentType: _incidentTypeController.text.trim().isEmpty ? null : _incidentTypeController.text.trim(),
       status: _status.isEmpty ? null : _status,
+      vehicleId: (_vehicleIdFilter != null && _vehicleIdFilter! > 0) ? _vehicleIdFilter : null,
       paymentMethod: _paymentMethod.isEmpty ? null : _paymentMethod,
     );
   }
@@ -135,6 +156,87 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
     }
   }
 
+  Future<void> _startVoiceInput() async {
+    if (!_speechAvailable) {
+      _showMessage('El reconocimiento de voz no está disponible en este dispositivo.', isError: true);
+      return;
+    }
+    if (_isListening || _isProcessingVoice) return;
+
+    setState(() {
+      _voiceWarnings = [];
+      _recognizedText = '';
+      _isListening = true;
+    });
+
+    await _speechToText.listen(
+      localeId: 'es_ES',
+      onResult: (result) async {
+        if (!result.finalResult) return;
+        final recognized = result.recognizedWords.trim();
+        setState(() {
+          _recognizedText = recognized;
+          _isListening = false;
+          _isProcessingVoice = true;
+        });
+        await _applyVoiceCommand(recognized);
+      },
+      listenFor: const Duration(seconds: 7),
+      pauseFor: const Duration(seconds: 2),
+    );
+  }
+
+  Future<void> _applyVoiceCommand(String text) async {
+    final token = context.read<AuthService>().token;
+    if (token == null || token.isEmpty) {
+      setState(() => _isProcessingVoice = false);
+      _showMessage('Debes iniciar sesión para usar reportes por voz.', isError: true);
+      return;
+    }
+
+    try {
+      final parsed = await _reportsService.voiceParse(token: token, text: text);
+      _applyParsedFilters(parsed.filters);
+      setState(() => _voiceWarnings = parsed.warnings);
+
+      if (parsed.action == 'pdf') {
+        await _exportPdf();
+      } else if (parsed.action == 'excel') {
+        await _exportExcel();
+      } else if (parsed.action == 'query') {
+        await _queryReports();
+      } else {
+        _showMessage('Comando aplicado. Revisa los filtros.');
+      }
+    } on ReportsServiceException catch (e) {
+      _showMessage(_mapError(e), isError: true);
+    } catch (_) {
+      _showMessage('No se pudo procesar el comando de voz.', isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingVoice = false);
+      }
+    }
+  }
+
+  void _applyParsedFilters(OperationalReportRequest filters) {
+    final safeVehicleId = (filters.vehicleId != null && filters.vehicleId! > 0) ? filters.vehicleId : null;
+    setState(() {
+      _startDate = _parseDate(filters.startDate);
+      _endDate = _parseDate(filters.endDate);
+      _incidentTypeController.text = filters.incidentType ?? '';
+      _status = filters.status ?? '';
+      _paymentMethod = filters.paymentMethod ?? '';
+      _vehicleIdFilter = safeVehicleId;
+    });
+  }
+
+  DateTime? _parseDate(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final dateOnly = value.length >= 10 ? value.substring(0, 10) : value;
+    return DateTime.tryParse(dateOnly);
+  }
+
   String _mapError(ReportsServiceException e) {
     if (e.statusCode == 401 || e.statusCode == 403) {
       return 'No tienes permisos para consultar estos reportes.';
@@ -173,7 +275,6 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
       'cash': 'Efectivo',
       'transfer': 'Transferencia',
       'qr': 'QR',
-      'card': 'Tarjeta',
     };
     return map[method] ?? method;
   }
@@ -203,7 +304,9 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
       _incidentTypeController.clear();
       _status = '';
       _paymentMethod = '';
+      _vehicleIdFilter = null;
       _error = null;
+      _voiceWarnings = [];
     });
   }
 
@@ -228,11 +331,30 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
                   color: Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.mic_off, color: Colors.blueGrey),
-                    SizedBox(width: 8),
-                    Expanded(child: Text('Espacio reservado para búsqueda por voz')),
+                    const Text('Habla claro y cerca del micrófono. Ejemplo: reporte de mayo completadas en PDF.'),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: (_isListening || _isProcessingVoice) ? null : _startVoiceInput,
+                      icon: Icon(_isListening ? Icons.mic : Icons.keyboard_voice_outlined),
+                      label: Text(
+                        _isListening
+                            ? 'Escuchando...'
+                            : (_isProcessingVoice ? 'Procesando comando...' : 'Usar voz'),
+                      ),
+                    ),
+                    if (_recognizedText.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text('Comando reconocido: "$_recognizedText"'),
+                    ],
+                    if (_voiceWarnings.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ..._voiceWarnings.map(
+                        (w) => Text('• $w', style: const TextStyle(color: Colors.orange)),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -313,7 +435,6 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
                 DropdownMenuItem(value: 'cash', child: Text('Efectivo')),
                 DropdownMenuItem(value: 'transfer', child: Text('Transferencia')),
                 DropdownMenuItem(value: 'qr', child: Text('QR')),
-                DropdownMenuItem(value: 'card', child: Text('Tarjeta')),
               ],
               onChanged: (value) => setState(() => _paymentMethod = value ?? ''),
               decoration: const InputDecoration(labelText: 'Método de pago'),

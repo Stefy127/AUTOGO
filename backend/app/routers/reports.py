@@ -1,5 +1,7 @@
-﻿from datetime import date, datetime, time
+﻿from calendar import monthrange
+from datetime import date, datetime, time, timedelta
 from io import BytesIO
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -27,9 +29,179 @@ from app.schemas import (
     OperationalReportRequest,
     OperationalReportResponse,
     OperationalReportSummary,
+    VoiceReportParseRequest,
+    VoiceReportParseResponse,
 )
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _normalize_text(text: str) -> str:
+    normalized = (text or "").strip().lower()
+    replacements = {
+        "á": "a",
+        "é": "e",
+        "í": "i",
+        "ó": "o",
+        "ú": "u",
+        "ñ": "n",
+    }
+    for old, new in replacements.items():
+        normalized = normalized.replace(old, new)
+    return normalized
+
+
+def _parse_voice_filters(raw_text: str) -> tuple[OperationalReportRequest, Optional[str], list[str]]:
+    text = _normalize_text(raw_text)
+    warnings: list[str] = []
+    today = date.today()
+
+    status_keywords = [
+        ("esperando ofertas", "waiting_offers"),
+        ("en progreso", "in_progress"),
+        ("pendientes", "pending"),
+        ("pendiente", "pending"),
+        ("asignadas", "assigned"),
+        ("asignado", "assigned"),
+        ("aceptadas", "accepted"),
+        ("aceptado", "accepted"),
+        ("completadas", "completed"),
+        ("completado", "completed"),
+        ("resueltas", "completed"),
+        ("resuelto", "completed"),
+        ("canceladas", "cancelled"),
+        ("cancelado", "cancelled"),
+        ("progreso", "in_progress"),
+    ]
+    payment_keywords = [
+        ("transferencia", "transfer"),
+        ("efectivo", "cash"),
+        ("tarjeta", "card"),
+        ("card", "card"),
+        ("qr", "qr"),
+    ]
+    type_keywords = [
+        ("neumatico", "tire"),
+        ("pinchazo", "tire"),
+        ("bateria", "battery"),
+        ("llanta", "tire"),
+        ("choque", "accident"),
+        ("accidente", "accident"),
+        ("aceite", "oil"),
+        ("motor", "engine"),
+    ]
+    months = {
+        "enero": 1,
+        "febrero": 2,
+        "marzo": 3,
+        "abril": 4,
+        "mayo": 5,
+        "junio": 6,
+        "julio": 7,
+        "agosto": 8,
+        "septiembre": 9,
+        "octubre": 10,
+        "noviembre": 11,
+        "diciembre": 12,
+    }
+
+    status_value = next((value for key, value in status_keywords if key in text), None)
+    payment_value = next((value for key, value in payment_keywords if key in text), None)
+    incident_type_value = next((value for key, value in type_keywords if key in text), None)
+
+    action: Optional[str] = "query"
+    if "pdf" in text:
+        action = "pdf"
+    elif "excel" in text:
+        action = "excel"
+
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+    if "hoy" in text:
+        start_date = today
+        end_date = today
+    elif "ayer" in text:
+        day = today - timedelta(days=1)
+        start_date = day
+        end_date = day
+    elif "este mes" in text or "mes actual" in text:
+        start_date = today.replace(day=1)
+        end_date = today
+    elif "ultimos 7 dias" in text or "ultimos siete dias" in text:
+        start_date = today - timedelta(days=7)
+        end_date = today
+    elif "ultimos 30 dias" in text or "ultimos treinta dias" in text:
+        start_date = today - timedelta(days=30)
+        end_date = today
+    else:
+        for month_name, month_number in months.items():
+            if month_name in text:
+                year = today.year
+                last_day = monthrange(year, month_number)[1]
+                start_date = date(year, month_number, 1)
+                end_date = date(year, month_number, last_day)
+                break
+
+    type_hint_words = ["bateria", "llanta", "pinchazo", "neumatico", "motor", "aceite", "choque", "accidente"]
+    if any(word in text for word in type_hint_words) and not incident_type_value:
+        warnings.append("No se reconocio el tipo de emergencia solicitado.")
+
+    if payment_value == "card":
+        warnings.append("El metodo de pago 'card' no esta disponible actualmente en reportes filtrados.")
+        payment_value = None
+
+    if not raw_text.strip():
+        action = None
+        warnings.append("No se recibio texto para interpretar.")
+
+    def _extract_id(patterns: list[str]) -> Optional[int]:
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                try:
+                    return int(match.group(1))
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    client_id = _extract_id(
+        [
+            r"\bcliente(?:\s+id)?\s+(\d+)\b",
+            r"\bid\s+cliente\s+(\d+)\b",
+        ]
+    )
+    workshop_id = _extract_id(
+        [
+            r"\btaller(?:\s+id)?\s+(\d+)\b",
+            r"\bid\s+taller\s+(\d+)\b",
+        ]
+    )
+    technician_id = _extract_id(
+        [
+            r"\btecnico(?:\s+id)?\s+(\d+)\b",
+            r"\bid\s+tecnico\s+(\d+)\b",
+        ]
+    )
+    vehicle_id = _extract_id(
+        [
+            r"\bvehiculo(?:\s+id)?\s+(\d+)\b",
+            r"\bid\s+vehiculo\s+(\d+)\b",
+        ]
+    )
+
+    filters = OperationalReportRequest(
+        start_date=start_date,
+        end_date=end_date,
+        incident_type=incident_type_value,
+        status=status_value,
+        payment_method=payment_value,
+        workshop_id=workshop_id,
+        technician_id=technician_id,
+        client_id=client_id,
+        vehicle_id=vehicle_id,
+    )
+    return filters, action, warnings
 
 
 def _to_datetime_range_start(value: Optional[date | datetime]) -> Optional[datetime]:
@@ -475,3 +647,55 @@ def export_operational_report_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="reporte_operacional.xlsx"'},
     )
+
+
+@router.post("/operational/voice-parse", response_model=VoiceReportParseResponse)
+def parse_operational_voice_command(
+    payload: VoiceReportParseRequest,
+    current_user: User = Depends(get_current_user),
+):
+    allowed_roles = {UserRole.ADMIN, UserRole.WORKSHOP, UserRole.CLIENT}
+    if current_user.role not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu rol no tiene acceso a comandos de voz para reportes",
+        )
+
+    filters, action, warnings = _parse_voice_filters(payload.text or "")
+
+    # Seguridad por rol: voz no debe proponer filtros de alcance prohibido
+    if current_user.role == UserRole.WORKSHOP:
+        if filters.client_id is not None:
+            warnings.append("El filtro client_id no está permitido para el rol workshop.")
+            filters.client_id = None
+        if filters.workshop_id is not None:
+            warnings.append("El filtro workshop_id no está permitido para el rol workshop.")
+            filters.workshop_id = None
+        if filters.vehicle_id is not None:
+            warnings.append("El filtro vehicle_id no está permitido para el rol workshop.")
+            filters.vehicle_id = None
+    elif current_user.role == UserRole.CLIENT:
+        if filters.client_id is not None:
+            warnings.append("El filtro client_id no está permitido para el rol client.")
+            filters.client_id = None
+        if filters.workshop_id is not None:
+            warnings.append("El filtro workshop_id no está permitido para el rol client.")
+            filters.workshop_id = None
+        if filters.technician_id is not None:
+            warnings.append("El filtro technician_id no está permitido para el rol client.")
+            filters.technician_id = None
+
+    return VoiceReportParseResponse(
+        recognized_text=payload.text,
+        filters=filters,
+        action=action,
+        warnings=warnings,
+    )
+
+
+
+
+
+
+
+

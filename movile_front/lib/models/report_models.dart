@@ -174,3 +174,34 @@ class OperationalReportResponse {
     );
   }
 }
+
+class VoiceReportParseResponse {
+  final String recognizedText;
+  final OperationalReportRequest filters;
+  final String? action;
+  final List<String> warnings;
+
+  VoiceReportParseResponse({
+    required this.recognizedText,
+    required this.filters,
+    required this.action,
+    required this.warnings,
+  });
+
+  factory VoiceReportParseResponse.fromJson(Map<String, dynamic> json) {
+    final filtersJson = (json['filters'] as Map?)?.cast<String, dynamic>() ?? {};
+    return VoiceReportParseResponse(
+      recognizedText: (json['recognized_text'] ?? '').toString(),
+      filters: OperationalReportRequest(
+        startDate: filtersJson['start_date']?.toString(),
+        endDate: filtersJson['end_date']?.toString(),
+        incidentType: filtersJson['incident_type']?.toString(),
+        status: filtersJson['status']?.toString(),
+        vehicleId: filtersJson['vehicle_id'] is num ? (filtersJson['vehicle_id'] as num).toInt() : int.tryParse(filtersJson['vehicle_id']?.toString() ?? ''),
+        paymentMethod: filtersJson['payment_method']?.toString(),
+      ),
+      action: json['action']?.toString(),
+      warnings: ((json['warnings'] as List?) ?? []).map((e) => e.toString()).toList(),
+    );
+  }
+}

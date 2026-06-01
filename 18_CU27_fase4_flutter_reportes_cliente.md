@@ -150,3 +150,5 @@ Descarga por plataforma:
 - Implementar voz en web y móvil (obligatoria para CU27 completo).
 - Definir UX final de micrófono para carga de filtros por voz.
 - Validación end-to-end de voz + exportaciones.
+
+- Ajuste posterior: se eliminó card/Tarjeta de filtros de método de pago y se mejoró ayuda de voz (hablar claro y cerca del micrófono).

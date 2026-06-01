@@ -116,7 +116,31 @@
       <header class="page-header">
         <div>
           <p>{{ roleDescription }}</p>
-          <p class="voice-placeholder">Espacio reservado para botón de micrófono (fase posterior).</p>
+          <p class="voice-placeholder">Di algo como: reporte de mayo completadas en PDF.</p>
+          <div class="voice-controls">
+            <button class="btn-secondary" (click)="startVoiceCommand()" [disabled]="voiceListening || voiceProcessing">
+              {{ voiceListening ? 'Escuchando...' : (voiceProcessing ? 'Procesando...' : 'Usar voz') }}
+            </button>
+          </div>
+          <div class="voice-controls">
+            <input
+              type="text"
+              class="voice-command-input"
+              [(ngModel)]="typedCommand"
+              placeholder="Escribe un comando, ej: reporte de mayo completadas en PDF" />
+            <button class="btn-primary" (click)="applyTypedCommand()" [disabled]="commandProcessing || voiceListening || voiceProcessing">
+              {{ commandProcessing ? 'Procesando...' : 'Aplicar comando' }}
+            </button>
+          </div>
+          <p class="voice-text" *ngIf="recognizedVoiceText">Comando reconocido/procesado: "{{ recognizedVoiceText }}"</p>
+          <p class="voice-error" *ngIf="voiceError">{{ voiceError }}</p>
+          <p class="voice-error-raw" *ngIf="lastVoiceErrorRaw">Detalle técnico: {{ lastVoiceErrorRaw }}</p>
+          <p class="voice-error" *ngIf="!voiceSupported">
+            Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.
+          </p>
+          <ul class="voice-warnings" *ngIf="voiceWarnings.length > 0">
+            <li *ngFor="let warning of voiceWarnings">{{ warning }}</li>
+          </ul>
         </div>
       </header>
 
@@ -154,17 +178,22 @@
 
           <div class="field">
             <label>Técnico ID</label>
-            <input type="number" [(ngModel)]="filters.technician_id" placeholder="Opcional" />
+            <input type="number" min="1" step="1" [(ngModel)]="filters.technician_id" placeholder="Opcional" />
           </div>
 
           <div class="field" *ngIf="isAdmin()">
             <label>Taller ID</label>
-            <input type="number" [(ngModel)]="filters.workshop_id" placeholder="Opcional" />
+            <input type="number" min="1" step="1" [(ngModel)]="filters.workshop_id" placeholder="Opcional" />
           </div>
 
           <div class="field" *ngIf="isAdmin()">
             <label>Cliente ID</label>
-            <input type="number" [(ngModel)]="filters.client_id" placeholder="Opcional" />
+            <input type="number" min="1" step="1" [(ngModel)]="filters.client_id" placeholder="Opcional" />
+          </div>
+
+          <div class="field" *ngIf="isAdmin()">
+            <label>Vehículo ID</label>
+            <input type="number" min="1" step="1" [(ngModel)]="filters.vehicle_id" placeholder="Opcional" />
           </div>
         </div>
 

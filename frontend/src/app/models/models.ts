@@ -257,3 +257,14 @@ export interface OperationalReportResponse {
   summary: OperationalReportSummary;
   items: OperationalReportItem[];
 }
+
+export interface VoiceReportParseRequest {
+  text: string;
+}
+
+export interface VoiceReportParseResponse {
+  recognized_text: string;
+  filters: OperationalReportRequest;
+  action: 'query' | 'pdf' | 'excel' | null;
+  warnings: string[];
+}
