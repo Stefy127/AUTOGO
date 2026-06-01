@@ -166,6 +166,15 @@ class HomeScreen extends StatelessWidget {
                           Navigator.pushNamed(context, '/rental-vehicles');
                         },
                       ),
+                      const SizedBox(height: 16),
+                      _buildSecondaryButtonLarge(
+                        context,
+                        icon: Icons.assessment_outlined,
+                        title: 'Reportes',
+                        onTap: () {
+                          Navigator.pushNamed(context, '/client-reports');
+                        },
+                      ),
                     ],
                   ),
                 ),

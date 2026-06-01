@@ -57,6 +57,11 @@
         <span *ngIf="sidebarOpen">Reporte</span>
       </button>
 
+      <button class="nav-item" routerLink="/reports/operational">
+        <span class="icon">📈</span>
+        <span *ngIf="sidebarOpen">Reportes Operacionales</span>
+      </button>
+
       <button
         class="nav-item"
         [class.active]="currentView === 'notifications'"

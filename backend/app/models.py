@@ -230,6 +230,13 @@ class Incident(Base):
     accepted_at = Column(DateTime, nullable=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+
+    # Offline sync traceability (CU22)
+    client_offline_id = Column(String, nullable=True, index=True)
+    client_email_offline = Column(String, nullable=True)
+    created_offline_at = Column(DateTime, nullable=True)
+    synced_at = Column(DateTime, nullable=True)
+    sync_source = Column(String, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -301,6 +308,12 @@ class Payment(Base):
     # Optional payment reference
     reference_number = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+
+    # CU25 - Stripe traceability fields (fase 1 preparación)
+    stripe_session_id = Column(String, nullable=True)
+    stripe_payment_intent_id = Column(String, nullable=True)
+    stripe_payment_status = Column(String, nullable=True)
+    currency = Column(String(10), nullable=False, default="usd")
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

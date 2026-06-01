@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     # CICLO 2 - Workshop Assignment
     MAX_WORKSHOP_DISTANCE_KM: float = 50.0
 
+    # CU25 - Stripe (fase 1 preparación)
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_SUCCESS_URL: str = "http://localhost:4200/#/payment-success"
+    STRIPE_CANCEL_URL: str = "http://localhost:4200/#/payment-cancel"
+    STRIPE_CURRENCY: str = "usd"
+
     class Config:
         env_file = ".env"
 

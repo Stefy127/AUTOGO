@@ -1,13 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+import json
+import stripe
 
 from app.database import get_db
 from app.models import User, Payment, Incident, Workshop, UserRole, IncidentStatus, PaymentMethod, WorkshopPaymentQR
-from app.schemas import PaymentCreate, PaymentResponse, PaymentUpdate, PaymentQRConfirm
+from app.schemas import (
+    PaymentCreate,
+    PaymentResponse,
+    PaymentUpdate,
+    PaymentQRConfirm,
+    StripeCheckoutResponse,
+    StripeWebhookResponse,
+    PaymentStatusResponse,
+)
 from app.auth import get_current_user
+from app.config import settings
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -23,6 +35,53 @@ def calculate_commission(amount: float, commission_percentage: float):
         "commission_amount": float(commission_amount),
         "workshop_earnings": float(workshop_earnings)
     }
+
+
+def _append_query_params(url: str, params: dict[str, str]) -> str:
+    parsed = urlparse(url)
+    if parsed.fragment:
+        fragment_path, _, fragment_query = parsed.fragment.partition("?")
+        current_fragment_query = dict(parse_qsl(fragment_query, keep_blank_values=True))
+        current_fragment_query.update(params)
+        new_fragment = f"{fragment_path}?{urlencode(current_fragment_query)}"
+        return urlunparse(parsed._replace(fragment=new_fragment))
+
+    current = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    current.update(params)
+    return urlunparse(parsed._replace(query=urlencode(current)))
+
+
+def _get_payment_with_incident_or_404(db: Session, payment_id: int):
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pago no encontrado"
+        )
+
+    incident = db.query(Incident).filter(Incident.id == payment.incident_id).first()
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente asociado no encontrado"
+        )
+    return payment, incident
+
+
+def _assert_payment_visibility(payment: Payment, incident: Incident, current_user: User, db: Session):
+    if current_user.role == UserRole.CLIENT:
+        if incident.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para ver este pago"
+            )
+    elif current_user.role == UserRole.WORKSHOP:
+        workshop = db.query(Workshop).filter(Workshop.owner_id == current_user.id).first()
+        if not workshop or incident.workshop_id != workshop.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para ver este pago"
+            )
 
 
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
@@ -106,6 +165,276 @@ async def create_payment(
     db.refresh(new_payment)
     
     return new_payment
+
+
+@router.post("/{payment_id}/stripe/checkout", response_model=StripeCheckoutResponse)
+async def create_stripe_checkout(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Crear una sesión de Stripe Checkout para un pago pendiente existente.
+    """
+    if current_user.role != UserRole.CLIENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo clientes pueden crear checkout con Stripe"
+        )
+
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe no está configurado: falta STRIPE_SECRET_KEY"
+        )
+
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pago no encontrado"
+        )
+
+    incident = db.query(Incident).filter(Incident.id == payment.incident_id).first()
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incidente asociado no encontrado"
+        )
+
+    if incident.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para pagar este incidente"
+        )
+
+    if payment.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este pago ya fue completado"
+        )
+
+    if incident.status != IncidentStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se puede pagar con Stripe cuando el incidente está COMPLETED"
+        )
+
+    amount_decimal = Decimal(str(payment.amount))
+    if amount_decimal <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Monto de pago inválido para checkout"
+        )
+
+    unit_amount = int((amount_decimal * Decimal("100")).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    currency = (settings.STRIPE_CURRENCY or "usd").lower()
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    metadata = {
+        "payment_id": str(payment.id),
+        "incident_id": str(incident.id),
+        "client_id": str(current_user.id),
+    }
+
+    success_url = _append_query_params(
+        settings.STRIPE_SUCCESS_URL,
+        {
+            "payment_id": str(payment.id),
+            "session_id": "{CHECKOUT_SESSION_ID}",
+        }
+    )
+    cancel_url = _append_query_params(
+        settings.STRIPE_CANCEL_URL,
+        {
+            "payment_id": str(payment.id),
+            "session_id": "{CHECKOUT_SESSION_ID}",
+        }
+    )
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="payment",
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata=metadata,
+            payment_intent_data={"metadata": metadata},
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": currency,
+                        "unit_amount": unit_amount,
+                        "product_data": {
+                            "name": f"Servicio AutoGo - Incidente #{incident.id}",
+                            "description": "Pago de atención de emergencia vehicular",
+                        },
+                    },
+                }
+            ],
+        )
+    except stripe.error.StripeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al crear checkout en Stripe: {str(exc)}"
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error inesperado al crear checkout: {str(exc)}"
+        )
+
+    payment.stripe_session_id = checkout_session.id
+    payment.stripe_payment_status = checkout_session.payment_status
+    payment.currency = currency
+
+    db.commit()
+    db.refresh(payment)
+
+    return StripeCheckoutResponse(
+        payment_id=payment.id,
+        checkout_url=checkout_session.url,
+        stripe_session_id=checkout_session.id,
+        stripe_payment_status=checkout_session.payment_status,
+        currency=currency,
+    )
+
+
+@router.post("/stripe/webhook", response_model=StripeWebhookResponse)
+async def stripe_webhook(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Webhook Stripe para confirmar pagos de Checkout.
+    """
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Stripe webhook no configurado: falta STRIPE_WEBHOOK_SECRET"
+        )
+
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature")
+
+    try:
+        stripe.Webhook.construct_event(
+            payload=payload,
+            sig_header=signature,
+            secret=settings.STRIPE_WEBHOOK_SECRET,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Payload inválido de Stripe"
+        )
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Firma inválida de Stripe webhook"
+        )
+
+    event = json.loads(payload.decode("utf-8"))
+    event_type = event.get("type")
+    if event_type not in [
+        "checkout.session.completed",
+        "checkout.session.async_payment_failed",
+        "checkout.session.expired",
+    ]:
+        return {"received": True, "ignored": event_type}
+
+    session = event.get("data", {}).get("object", {}) or {}
+    metadata = session.get("metadata", {}) or {}
+    payment_id = metadata.get("payment_id")
+    session_id = session.get("id")
+    payment_status = session.get("payment_status")
+    payment_intent = session.get("payment_intent")
+
+    payment = None
+    if payment_id:
+        try:
+            payment_id_int = int(payment_id)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="metadata.payment_id inválido en webhook Stripe"
+            )
+        payment = db.query(Payment).filter(Payment.id == payment_id_int).first()
+    elif session_id:
+        payment = db.query(Payment).filter(Payment.stripe_session_id == session_id).first()
+
+    if event_type == "checkout.session.completed":
+        if not payment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró el pago asociado al webhook"
+            )
+
+        if payment.stripe_session_id and session_id and payment.stripe_session_id != session_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Inconsistencia de sesión Stripe para el pago"
+            )
+
+        if payment.is_paid:
+            return StripeWebhookResponse(received=True)
+
+        payment.stripe_payment_status = payment_status or "completed"
+        if payment_intent:
+            payment.stripe_payment_intent_id = str(payment_intent)
+        if session_id:
+            payment.stripe_session_id = str(session_id)
+
+        if (payment_status or "").lower() == "paid":
+            payment.is_paid = True
+            payment.paid_at = datetime.utcnow()
+            payment.payment_method = PaymentMethod.TRANSFER
+            payment.reference_number = str(payment_intent) if payment_intent else payment.reference_number
+            payment.notes = "Pago confirmado por Stripe Checkout"
+            payment.updated_at = datetime.utcnow()
+
+            incident = db.query(Incident).filter(Incident.id == payment.incident_id).first()
+            if incident:
+                incident.payment_method = PaymentMethod.TRANSFER
+
+        db.commit()
+        return StripeWebhookResponse(received=True)
+
+    if event_type in ["checkout.session.async_payment_failed", "checkout.session.expired"]:
+        if payment:
+            fallback_status = "async_payment_failed" if event_type.endswith("failed") else "expired"
+            payment.stripe_payment_status = payment_status or fallback_status
+            if session_id and not payment.stripe_session_id:
+                payment.stripe_session_id = str(session_id)
+            db.commit()
+        return StripeWebhookResponse(received=True)
+
+    return StripeWebhookResponse(received=True)
+
+
+@router.get("/{payment_id}/status", response_model=PaymentStatusResponse)
+async def get_payment_status(
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    payment, incident = _get_payment_with_incident_or_404(db, payment_id)
+    _assert_payment_visibility(payment, incident, current_user, db)
+
+    return PaymentStatusResponse(
+        payment_id=payment.id,
+        incident_id=payment.incident_id,
+        amount=float(payment.amount),
+        is_paid=payment.is_paid,
+        paid_at=payment.paid_at,
+        payment_method=payment.payment_method,
+        stripe_session_id=payment.stripe_session_id,
+        stripe_payment_intent_id=payment.stripe_payment_intent_id,
+        stripe_payment_status=payment.stripe_payment_status,
+        currency=payment.currency,
+        commission_amount=float(payment.commission_amount),
+        workshop_earnings=float(payment.workshop_earnings),
+    )
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

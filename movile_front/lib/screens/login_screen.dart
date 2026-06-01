@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 
@@ -163,6 +163,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                           icon: const Icon(Icons.build_circle_outlined),
                           label: const Text('Acceso para Mecánicos'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/emergency-offline');
+                          },
+                          icon: const Icon(Icons.wifi_off_outlined),
+                          label: const Text('Emergencia offline'),
                         ),
                       ],
                     ),
