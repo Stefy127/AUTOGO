@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 from enum import Enum
 
@@ -17,6 +17,8 @@ class IncidentStatus(str, Enum):
     WAITING_OFFERS = "waiting_offers"
     ASSIGNED = "assigned"
     ACCEPTED = "accepted"
+    ON_ROUTE = "on_route"
+    IN_SERVICE = "in_service"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -161,6 +163,7 @@ class IncidentBase(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     location_text: Optional[str] = None
+    location_selected: Optional[bool] = None
     image_url: Optional[str] = None
     audio_url: Optional[str] = None
 
@@ -189,6 +192,9 @@ class IncidentResponse(IncidentBase):
     classification: Optional[str] = None
     ai_summary: Optional[str] = None
     estimated_arrival_time: Optional[int] = None
+    remaining_distance_meters: Optional[int] = None
+    route_polyline: Optional[str] = None
+    last_eta_update_at: Optional[datetime] = None
     accepted_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -236,6 +242,21 @@ class OfferResponse(BaseModel):
     updated_at: datetime
     workshop: Optional['WorkshopResponse'] = None
     technician: Optional['TechnicianResponse'] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IncidentTrackingResponse(BaseModel):
+    id: int
+    incident_id: int
+    technician_id: int
+    latitude: float
+    longitude: float
+    remaining_distance_meters: Optional[int] = None
+    estimated_arrival_time: Optional[int] = None
+    status: IncidentStatus
+    recorded_at: datetime
 
     class Config:
         from_attributes = True
@@ -326,6 +347,11 @@ class TechnicianUpdate(BaseModel):
     current_longitude: Optional[float] = None
 
 
+class TechnicianLocationUpdate(BaseModel):
+    latitude: float
+    longitude: float
+
+
 class TechnicianResponse(TechnicianBase):
     id: int
     workshop_id: int
@@ -379,7 +405,12 @@ class TechnicianAccessResponse(BaseModel):
 
 
 class TechnicianIncidentStatusUpdate(BaseModel):
-    status: IncidentStatus
+    status: Literal[
+        "on_route",
+        "in_service",
+        "completed",
+        "cancelled",
+    ]
 
 
 class TechnicianPaymentConfirm(BaseModel):

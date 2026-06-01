@@ -1,12 +1,14 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
+import math
 
 from app.database import get_db
 from app.auth import get_current_user
 from app import models, schemas
 from app.services.mapbox_service import MapboxService
 from app.services.notification_service import create_notification
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 mapbox_service = MapboxService()
@@ -92,7 +94,25 @@ async def create_offer(
             incident.longitude
         )
         if distance_info:
-            estimated_arrival_time = int(distance_info.get("duration_minutes", 0)) + 5
+            # normalize to seconds
+            estimated_arrival_time = (int(distance_info.get("duration_minutes", 0)) + 5) * 60
+        else:
+            # Fallback: estimate using haversine distance and average speed
+            def haversine_km(lat1, lon1, lat2, lon2):
+                R = 6371.0
+                phi1 = math.radians(lat1)
+                phi2 = math.radians(lat2)
+                dphi = math.radians(lat2 - lat1)
+                dlambda = math.radians(lon2 - lon1)
+                a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                return R * c
+
+            distance_km = haversine_km(workshop.latitude, workshop.longitude, incident.latitude, incident.longitude)
+            avg_speed_kmh = 30.0  # conservative default workshop->client speed
+            estimated_secs = int((distance_km / avg_speed_kmh) * 3600)
+            # add small buffer of 5 minutes
+            estimated_arrival_time = max(60, estimated_secs + 5 * 60)
 
     offer = models.Offer(
         incident_id=incident.id,
@@ -130,7 +150,15 @@ async def create_offer(
         notification_type="offer_received",
     )
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Another offer for same incident/workshop was created concurrently
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An offer for this incident and workshop already exists"
+        )
     db.refresh(offer)
 
     return db.query(models.Offer).options(

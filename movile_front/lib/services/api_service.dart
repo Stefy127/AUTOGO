@@ -1,15 +1,23 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
   // API URL configurable at runtime:
   // flutter run --dart-define=API_BASE_URL=https://autogo-backend-g4ctv55smq-uc.a.run.app
   // If not provided, defaults to production backend on Cloud Run.
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://autogo-backend-g4ctv55smq-uc.a.run.app',
-  );
+  static String get baseUrl {
+    const fromDefine = String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: 'https://autogo-backend-g4ctv55smq-uc.a.run.app',
+    );
+    try {
+      final envValue = dotenv.env['API_BASE_URL'];
+      if (envValue != null && envValue.isNotEmpty) return envValue;
+    } catch (_) {}
+    return fromDefine;
+  }
 
   static const _timeout = Duration(seconds: 15);
 

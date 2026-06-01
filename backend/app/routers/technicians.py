@@ -145,6 +145,8 @@ def delete_technician(
         Incident.technician_id == technician.id,
         Incident.status.in_([
             IncidentStatus.ACCEPTED,
+            IncidentStatus.ON_ROUTE,
+            IncidentStatus.IN_SERVICE,
             IncidentStatus.IN_PROGRESS
         ])
     ).first()

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -17,7 +18,9 @@ import 'services/api_service.dart';
 import 'services/technician_access_service.dart';
 import 'services/mobile_notification_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: 'assets/.env');
   runApp(const MyApp());
 }
 

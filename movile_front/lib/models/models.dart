@@ -165,6 +165,8 @@ class Offer {
 
     final rawEta = json['estimated_arrival_time'];
     final parsedEta = rawEta is int ? rawEta : int.tryParse(rawEta?.toString() ?? '');
+    // Backend stores ETA as seconds (for incidents and offers). Convert to minutes for display in the mobile UI.
+    final parsedEtaMinutes = parsedEta != null ? (parsedEta ~/ 60) : null;
 
     return Offer(
       id: json['id'],
@@ -172,12 +174,15 @@ class Offer {
       workshopId: json['workshop_id'],
       technicianId: json['technician_id'],
       amount: parsedAmount,
-      estimatedArrivalTime: parsedEta,
+      estimatedArrivalTime: parsedEtaMinutes,
       notes: json['notes'],
       status: (json['status']?.toString() ?? 'pending').toLowerCase(),
       createdAt: DateTime.parse(json['created_at']),
-      workshop: json['workshop'] != null ? Workshop.fromJson(json['workshop']) : null,
-      technician: json['technician'] != null ? Technician.fromJson(json['technician']) : null,
+      workshop:
+          json['workshop'] != null ? Workshop.fromJson(json['workshop']) : null,
+      technician: json['technician'] != null
+          ? Technician.fromJson(json['technician'])
+          : null,
     );
   }
 }
@@ -242,7 +247,7 @@ class IncidentHistory {
     return IncidentHistory(
       id: json['id'],
       incidentId: json['incident_id'],
-      status: json['status'],
+      status: (json['status']?.toString() ?? 'pending').toLowerCase(),
       note: json['note'],
       timestamp: DateTime.parse(json['timestamp']),
     );
@@ -269,6 +274,9 @@ class Incident {
   final Workshop? workshop;
   final Technician? technician;
   final DateTime? estimatedArrivalTime;
+  final int? remainingDistanceMeters;
+  final String? routePolyline;
+  final DateTime? lastEtaUpdateAt;
   final DateTime? acceptedAt;
   final DateTime? startedAt;
   final DateTime? completedAt;
@@ -294,6 +302,9 @@ class Incident {
     this.workshop,
     this.technician,
     this.estimatedArrivalTime,
+    this.remainingDistanceMeters,
+    this.routePolyline,
+    this.lastEtaUpdateAt,
     this.acceptedAt,
     this.startedAt,
     this.completedAt,
@@ -311,25 +322,44 @@ class Incident {
       locationText: json['location_text'],
       vehicleId: json['vehicle_id'],
       user: json['user'] != null ? User.fromJson(json['user']) : null,
-      vehicle: json['vehicle'] != null ? Vehicle.fromJson(json['vehicle']) : null,
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      vehicle:
+          json['vehicle'] != null ? Vehicle.fromJson(json['vehicle']) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
       priority: json['priority'] ?? 'medium',
       classification: json['classification'],
       aiSummary: json['ai_summary'],
       workshopId: json['workshop_id'],
       technicianId: json['technician_id'],
-      workshop: json['workshop'] != null ? Workshop.fromJson(json['workshop']) : null,
-      technician: json['technician'] != null ? Technician.fromJson(json['technician']) : null,
-        estimatedArrivalTime: json['estimated_arrival_time'] != null
-          ? (json['estimated_arrival_time'] is int
-            ? DateTime.now().add(Duration(minutes: json['estimated_arrival_time']))
-            : DateTime.parse(json['estimated_arrival_time'].toString()))
+      workshop:
+          json['workshop'] != null ? Workshop.fromJson(json['workshop']) : null,
+      technician: json['technician'] != null
+          ? Technician.fromJson(json['technician'])
           : null,
-      acceptedAt: json['accepted_at'] != null ? DateTime.parse(json['accepted_at']) : null,
-      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']) : null,
-      completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at']) : null,
+      estimatedArrivalTime: json['estimated_arrival_time'] != null
+          ? (json['estimated_arrival_time'] is int
+              ? DateTime.now()
+                  .add(Duration(seconds: json['estimated_arrival_time']))
+              : DateTime.parse(json['estimated_arrival_time'].toString()))
+          : null,
+      remainingDistanceMeters: json['remaining_distance_meters']?.toInt(),
+      routePolyline: json['route_polyline'],
+      lastEtaUpdateAt: json['last_eta_update_at'] != null
+          ? DateTime.parse(json['last_eta_update_at'].toString())
+          : null,
+      acceptedAt: json['accepted_at'] != null
+          ? DateTime.parse(json['accepted_at'])
+          : null,
+      startedAt: json['started_at'] != null
+          ? DateTime.parse(json['started_at'])
+          : null,
+      completedAt: json['completed_at'] != null
+          ? DateTime.parse(json['completed_at'])
+          : null,
       photoUrl: json['photo_url'],
-      payment: json['payment'] != null ? Payment.fromJson(json['payment']) : null,
+      payment:
+          json['payment'] != null ? Payment.fromJson(json['payment']) : null,
     );
   }
 
@@ -417,7 +447,16 @@ class AppNotification {
       message: json['message']?.toString() ?? '',
       notificationType: json['notification_type']?.toString() ?? 'general',
       isRead: json['is_read'] == true,
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: (() {
+        try {
+          final s = json['created_at']?.toString();
+          if (s == null || s.isEmpty) return DateTime.now();
+          final parsed = DateTime.tryParse(s);
+          return parsed ?? DateTime.now();
+        } catch (_) {
+          return DateTime.now();
+        }
+      })(),
     );
   }
 }

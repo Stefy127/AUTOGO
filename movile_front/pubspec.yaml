@@ -24,6 +24,7 @@ dependencies:
   path_provider: ^2.1.2
   http_parser: ^4.0.2
   flutter_local_notifications: ^17.2.3
+  flutter_dotenv: ^5.0.2
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +33,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/.env

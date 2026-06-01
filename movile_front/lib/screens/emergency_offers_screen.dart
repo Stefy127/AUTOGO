@@ -111,7 +111,8 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
                         color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+                      child: Text(_error!,
+                          style: TextStyle(color: Colors.red.shade700)),
                     ),
                   ],
                   if (_offers.isEmpty)
@@ -127,10 +128,12 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
                       ),
                     ),
                   ..._offers.map((offer) {
-                    final workshopName = offer.workshop?.name ?? 'Taller #${offer.workshopId}';
+                    final workshopName =
+                        offer.workshop?.name ?? 'Taller #${offer.workshopId}';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(
@@ -141,11 +144,14 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
                                 Expanded(
                                   child: Text(
                                     workshopName,
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: offer.status == 'pending'
                                         ? Colors.orange.shade100
@@ -156,7 +162,9 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
                                   ),
                                   child: Text(
                                     offer.status,
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700),
                                   ),
                                 ),
                               ],
@@ -164,20 +172,26 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
                             const SizedBox(height: 8),
                             Text('Monto: \$${offer.amount.toStringAsFixed(2)}'),
                             if (offer.estimatedArrivalTime != null)
-                              Text('Llegada estimada: ${offer.estimatedArrivalTime} min'),
+                              Text(
+                                'Llegada estimada: ${offer.estimatedArrivalTime} min',
+                              ),
                             if (offer.technician != null)
                               Text('Tecnico: ${offer.technician!.name}'),
-                            if (offer.notes != null && offer.notes!.trim().isNotEmpty)
+                            if (offer.notes != null &&
+                                offer.notes!.trim().isNotEmpty)
                               Text('Notas: ${offer.notes}'),
                             const SizedBox(height: 12),
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: (_submitting || offer.status != 'pending')
-                                    ? null
-                                    : () => _acceptOffer(offer),
+                                onPressed:
+                                    (_submitting || offer.status != 'pending')
+                                        ? null
+                                        : () => _acceptOffer(offer),
                                 child: Text(
-                                  _submitting ? 'Procesando...' : 'Seleccionar oferta',
+                                  _submitting
+                                      ? 'Procesando...'
+                                      : 'Seleccionar oferta',
                                 ),
                               ),
                             ),

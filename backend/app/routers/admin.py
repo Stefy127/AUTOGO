@@ -297,7 +297,13 @@ async def get_platform_stats(
     total_incidents = db.query(Incident).count()
     pending_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.PENDING).count()
     accepted_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.ACCEPTED).count()
-    in_progress_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.IN_PROGRESS).count()
+    in_progress_incidents = db.query(Incident).filter(
+        Incident.status.in_([
+            IncidentStatus.ON_ROUTE,
+            IncidentStatus.IN_SERVICE,
+            IncidentStatus.IN_PROGRESS,
+        ])
+    ).count()
     completed_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.COMPLETED).count()
     cancelled_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.CANCELLED).count()
     

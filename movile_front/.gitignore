@@ -7,3 +7,7 @@
 .pub/
 build/
 *.lock
+# Local environment variables (Mapbox token)
+.env
+# Also ignore asset copy
+assets/.env

@@ -12,7 +12,8 @@ from typing import Optional, Dict
 try:
     import google.generativeai as genai
     _GENAI_AVAILABLE = True
-except ImportError:
+except Exception:
+    # Catch any exception during import (including native extension errors)
     _GENAI_AVAILABLE = False
     genai = None  # type: ignore
 

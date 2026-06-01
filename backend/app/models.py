@@ -19,6 +19,8 @@ class IncidentStatus(str, enum.Enum):
     WAITING_OFFERS = "waiting_offers"
     ASSIGNED = "assigned"
     ACCEPTED = "accepted"
+    ON_ROUTE = "on_route"
+    IN_SERVICE = "in_service"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -162,6 +164,7 @@ class Technician(Base):
     assigned_incidents = relationship("Incident", back_populates="technician")
     offers = relationship("Offer", back_populates="technician")
     access_sessions = relationship("TechnicianAccessSession", back_populates="technician", cascade="all, delete-orphan")
+    tracking_points = relationship("IncidentTracking", back_populates="technician", cascade="all, delete-orphan")
 
 
 class Vehicle(Base):
@@ -227,6 +230,9 @@ class Incident(Base):
     
     # Timing
     estimated_arrival_time = Column(Integer, nullable=True)
+    remaining_distance_meters = Column(Integer, nullable=True)
+    route_polyline = Column(Text, nullable=True)
+    last_eta_update_at = Column(DateTime, nullable=True)
     accepted_at = Column(DateTime, nullable=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
@@ -242,6 +248,24 @@ class Incident(Base):
     history = relationship("IncidentHistory", back_populates="incident", cascade="all, delete-orphan")
     payment = relationship("Payment", back_populates="incident", uselist=False, cascade="all, delete-orphan")
     offers = relationship("Offer", back_populates="incident", cascade="all, delete-orphan")
+    tracking_points = relationship("IncidentTracking", back_populates="incident", cascade="all, delete-orphan")
+
+
+class IncidentTracking(Base):
+    __tablename__ = "incident_tracking"
+
+    id = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True)
+    technician_id = Column(Integer, ForeignKey("technicians.id", ondelete="CASCADE"), nullable=False, index=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    remaining_distance_meters = Column(Integer, nullable=True)
+    estimated_arrival_time = Column(Integer, nullable=True)
+    status = Column(Enum(IncidentStatus), nullable=False)
+    recorded_at = Column(DateTime, default=datetime.utcnow)
+
+    incident = relationship("Incident", back_populates="tracking_points")
+    technician = relationship("Technician", back_populates="tracking_points")
 
 
 class Offer(Base):

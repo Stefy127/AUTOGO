@@ -467,7 +467,8 @@ async def accept_incident(
         if distance_info:
             # Add some preparation time (5 minutes) to the travel duration
             total_minutes = distance_info.get("duration_minutes", 0) + 5
-            incident.estimated_arrival_time = total_minutes
+            # normalize to seconds
+            incident.estimated_arrival_time = int(total_minutes) * 60
     
     # Marcar técnico como no disponible
     technician.is_available = False
@@ -611,7 +612,11 @@ async def get_workshop_stats(
     ).count()
     in_progress_incidents = db.query(Incident).filter(
         Incident.workshop_id == workshop.id,
-        Incident.status == IncidentStatus.IN_PROGRESS
+        Incident.status.in_([
+            IncidentStatus.ON_ROUTE,
+            IncidentStatus.IN_SERVICE,
+            IncidentStatus.IN_PROGRESS,
+        ])
     ).count()
     completed_incidents = db.query(Incident).filter(
         Incident.workshop_id == workshop.id,

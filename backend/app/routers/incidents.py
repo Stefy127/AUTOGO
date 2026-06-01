@@ -1,20 +1,113 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
+from jose import JWTError, jwt
 from app.database import get_db
 from app import models, schemas
+from app.config import settings
 from app.auth import get_current_active_user
 from app.services.ai_service import AIService
 from app.services.mapbox_service import MapboxService
 from app.services.notification_service import create_notification
+from app.services.websocket_manager import websocket_manager
 import os
+import logging
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
+incident_socket_security = HTTPBearer(auto_error=False)
 
 # Initialize services
 ai_service = AIService()
 mapbox_service = MapboxService()
+logger = logging.getLogger(__name__)
+
+# Debug-only lightweight endpoint to validate incident payloads without DB/auth
+if os.getenv("DEBUG_INCIDENTS", "false").lower() == "true":
+    @router.post("/_debug_create")
+    async def debug_create_incident(incident: schemas.IncidentCreate):
+        # Enforce same location rules as real endpoint
+        if not getattr(incident, 'location_selected', False) or incident.latitude is None or incident.longitude is None:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Client must provide a fixed location (latitude and longitude) to create an incident"}
+            )
+        return {
+            "ok": True,
+            "latitude": incident.latitude,
+            "longitude": incident.longitude,
+            "location_selected": getattr(incident, 'location_selected', None),
+        }
+
+
+def _resolve_actor_from_token(token: str, db: Session):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email = payload.get("sub")
+        if email:
+            user = db.query(models.User).filter(models.User.email == email).first()
+            if user:
+                return {"type": "user", "actor": user}
+    except JWTError:
+        pass
+
+    technician_session = db.query(models.TechnicianAccessSession).options(
+        joinedload(models.TechnicianAccessSession.technician)
+    ).filter(
+        models.TechnicianAccessSession.access_token == token
+    ).first()
+
+    if technician_session and technician_session.technician and technician_session.technician.is_active:
+        if technician_session.expires_at and technician_session.expires_at < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Technician access token expired"
+            )
+        return {"type": "technician", "actor": technician_session.technician}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials"
+    )
+
+
+def _authorize_incident_access(actor_info: dict, incident: models.Incident, db: Session) -> None:
+    if actor_info["type"] == "technician":
+        technician = actor_info["actor"]
+        if incident.technician_id != technician.id or incident.workshop_id != technician.workshop_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this incident tracking"
+            )
+        return
+
+    user = actor_info["actor"]
+    if user.role == models.UserRole.ADMIN:
+        return
+
+    if user.role == models.UserRole.CLIENT:
+        if incident.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this incident tracking"
+            )
+        return
+
+    if user.role == models.UserRole.WORKSHOP:
+        workshop = db.query(models.Workshop).filter(models.Workshop.owner_id == user.id).first()
+        if not workshop or incident.workshop_id != workshop.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this incident tracking"
+            )
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized to view this incident tracking"
+    )
 
 
 @router.post("", response_model=schemas.IncidentResponse, status_code=status.HTTP_201_CREATED)
@@ -61,13 +154,22 @@ async def create_incident(
         # Default priority if AI disabled
         incident_data["priority"] = models.IncidentPriority.MEDIUM
     
-    # Geocode address if location text provided but no coordinates
-    if incident.location_text and (not incident.latitude or not incident.longitude or incident.latitude == 0.0 or incident.longitude == 0.0):
-        geocode_result = await mapbox_service.geocode_address(incident.location_text)
-        if geocode_result:
-            incident_data["latitude"] = geocode_result[0]
-            incident_data["longitude"] = geocode_result[1]
+    # Require explicit client location: clients must send coordinates and mark location_selected
+    if not getattr(incident, 'location_selected', False) or incident.latitude is None or incident.longitude is None:
+        logger.warning(
+            "Incident creation rejected: missing client location - location_selected=%s, latitude=%s, longitude=%s",
+            getattr(incident, 'location_selected', None),
+            incident.latitude,
+            incident.longitude,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Client must provide a fixed location (latitude and longitude) to create an incident"
+        )
     
+    # Remove extra fields that are present in the request schema but not in the DB model
+    incident_data.pop('location_selected', None)
+
     # Create incident
     db_incident = models.Incident(**incident_data)
     db.add(db_incident)
@@ -402,6 +504,74 @@ def update_incident(
         db.commit()
     
     return incident
+
+
+@router.get("/{incident_id}/tracking", response_model=List[schemas.IncidentTrackingResponse])
+def get_incident_tracking_history(
+    incident_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(incident_socket_security),
+    db: Session = Depends(get_db),
+):
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing credentials",
+        )
+
+    incident = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found",
+        )
+
+    actor_info = _resolve_actor_from_token(credentials.credentials, db)
+    _authorize_incident_access(actor_info, incident, db)
+
+    tracking_points = db.query(models.IncidentTracking).filter(
+        models.IncidentTracking.incident_id == incident_id
+    ).order_by(models.IncidentTracking.recorded_at.asc(), models.IncidentTracking.id.asc()).all()
+
+    return tracking_points
+
+
+@router.websocket("/ws/incidents/{incident_id}")
+async def websocket_incident_updates(
+    websocket: WebSocket,
+    incident_id: int,
+    db: Session = Depends(get_db),
+):
+    token = websocket.query_params.get("token")
+    if not token:
+        authorization = websocket.headers.get("authorization")
+        if authorization and authorization.lower().startswith("bearer "):
+            token = authorization.split(" ", 1)[1].strip()
+
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    incident = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
+    if not incident:
+        await websocket.close(code=1008)
+        return
+
+    try:
+        actor_info = _resolve_actor_from_token(token, db)
+        _authorize_incident_access(actor_info, incident, db)
+    except HTTPException:
+        await websocket.close(code=1008)
+        return
+
+    await websocket_manager.connect(incident_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(incident_id, websocket)
+    except Exception:
+        websocket_manager.disconnect(incident_id, websocket)
+        await websocket.close()
 
 
 @router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
