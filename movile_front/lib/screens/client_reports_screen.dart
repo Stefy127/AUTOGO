@@ -312,6 +312,7 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Mis Reportes')),
       body: SafeArea(
@@ -325,41 +326,9 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
                 style: TextStyle(fontSize: 16, color: Colors.black87),
               ),
               const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Habla claro y cerca del micrófono. Ejemplo: reporte de mayo completadas en PDF.'),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: (_isListening || _isProcessingVoice) ? null : _startVoiceInput,
-                      icon: Icon(_isListening ? Icons.mic : Icons.keyboard_voice_outlined),
-                      label: Text(
-                        _isListening
-                            ? 'Escuchando...'
-                            : (_isProcessingVoice ? 'Procesando comando...' : 'Usar voz'),
-                      ),
-                    ),
-                    if (_recognizedText.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text('Comando reconocido: "$_recognizedText"'),
-                    ],
-                    if (_voiceWarnings.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      ..._voiceWarnings.map(
-                        (w) => Text('• $w', style: const TextStyle(color: Colors.orange)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
               _buildFiltersCard(),
+              const SizedBox(height: 14),
+              _buildVoiceCard(theme),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(_error!, style: const TextStyle(color: Colors.red)),
@@ -382,13 +351,17 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
   Widget _buildFiltersCard() {
     final formatter = DateFormat('yyyy-MM-dd');
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Filtros', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
+            const Text('Filtros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 2),
+            Text('Ajusta fechas y criterios para consultar o exportar reportes.', style: TextStyle(color: Colors.blueGrey.shade600, fontSize: 12)),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -444,14 +417,20 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                ElevatedButton(onPressed: _loading ? null : _queryReports, child: const Text('Consultar')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+                  onPressed: _loading ? null : _queryReports,
+                  child: const Text('Consultar'),
+                ),
                 OutlinedButton(onPressed: _clearFilters, child: const Text('Limpiar filtros')),
                 ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF475569), foregroundColor: Colors.white),
                   onPressed: _exportingPdf ? null : _exportPdf,
                   icon: const Icon(Icons.picture_as_pdf),
                   label: Text(_exportingPdf ? 'Exportando...' : 'Exportar PDF'),
                 ),
                 ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF475569), foregroundColor: Colors.white),
                   onPressed: _exportingExcel ? null : _exportExcel,
                   icon: const Icon(Icons.table_view),
                   label: Text(_exportingExcel ? 'Exportando...' : 'Exportar Excel'),
@@ -464,16 +443,80 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
     );
   }
 
+  Widget _buildVoiceCard(ThemeData theme) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Consulta por voz', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 4),
+            const Text(
+              'Usa tu voz para llenar filtros o generar acciones rápidas. Habla claro y cerca del micrófono.',
+              style: TextStyle(fontSize: 13, color: Colors.black54),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Ejemplos: “reporte de mayo completadas en PDF”, “reporte con cliente id 3”, “últimos 7 días en Excel”.',
+              style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                InkWell(
+                  borderRadius: BorderRadius.circular(28),
+                  onTap: (_isListening || _isProcessingVoice) ? null : _startVoiceInput,
+                  child: Ink(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: _isListening
+                            ? [const Color(0xFFEF4444), const Color(0xFFF97316)]
+                            : [const Color(0xFF3B82F6), const Color(0xFF6366F1)],
+                      ),
+                      boxShadow: const [BoxShadow(color: Color(0x334F46E5), blurRadius: 14, offset: Offset(0, 6))],
+                    ),
+                    child: const Center(child: Text('🎤', style: TextStyle(fontSize: 22))),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _isListening ? 'Escuchando...' : (_isProcessingVoice ? 'Procesando comando...' : 'Usar voz'),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            if (_recognizedText.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('Comando reconocido: "$_recognizedText"'),
+            ],
+            if (_voiceWarnings.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ..._voiceWarnings.map((w) => Text('• $w', style: const TextStyle(color: Colors.orange))),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildKpis() {
-    final kpis = <MapEntry<String, String>>[
-      MapEntry('Total incidentes', _summary.totalIncidents.toString()),
-      MapEntry('Pendientes', _summary.pending.toString()),
-      MapEntry('En progreso', _summary.inProgress.toString()),
-      MapEntry('Completados', _summary.completed.toString()),
-      MapEntry('Cancelados', _summary.cancelled.toString()),
-      MapEntry('Monto total', _summary.totalAmount.toStringAsFixed(2)),
-      MapEntry('Pagos realizados', _summary.totalPaid.toString()),
-      MapEntry('Pagos pendientes', _summary.totalUnpaid.toString()),
+    final kpis = <Map<String, dynamic>>[
+      {'label': 'Total incidentes', 'value': _summary.totalIncidents.toString(), 'colorA': const Color(0xFFDBEAFE), 'colorB': const Color(0xFFBFDBFE)},
+      {'label': 'Pendientes', 'value': _summary.pending.toString(), 'colorA': const Color(0xFFFFEDD5), 'colorB': const Color(0xFFFED7AA)},
+      {'label': 'En progreso', 'value': _summary.inProgress.toString(), 'colorA': const Color(0xFFCFFAFE), 'colorB': const Color(0xFFA5F3FC)},
+      {'label': 'Completados', 'value': _summary.completed.toString(), 'colorA': const Color(0xFFDCFCE7), 'colorB': const Color(0xFFBBF7D0)},
+      {'label': 'Cancelados', 'value': _summary.cancelled.toString(), 'colorA': const Color(0xFFFEE2E2), 'colorB': const Color(0xFFFECACA)},
+      {'label': 'Monto total', 'value': _summary.totalAmount.toStringAsFixed(2), 'colorA': const Color(0xFFFEF9C3), 'colorB': const Color(0xFFFEF08A)},
+      {'label': 'Pagos realizados', 'value': _summary.totalPaid.toString(), 'colorA': const Color(0xFFEEF2FF), 'colorB': const Color(0xFFE0E7FF)},
+      {'label': 'Pagos pendientes', 'value': _summary.totalUnpaid.toString(), 'colorA': const Color(0xFFFAE8FF), 'colorB': const Color(0xFFF5D0FE)},
     ];
 
     return GridView.builder(
@@ -488,16 +531,21 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
       ),
       itemBuilder: (context, index) {
         final item = kpis[index];
-        return Card(
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [item['colorA'] as Color, item['colorB'] as Color]),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [BoxShadow(color: Color(0x220F172A), blurRadius: 10, offset: Offset(0, 4))],
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.key, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 4),
-                Text(item.value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(item['label'] as String, style: const TextStyle(fontSize: 12, color: Color(0xFF334155), fontWeight: FontWeight.w600)),
+                const SizedBox(height: 5),
+                Text(item['value'] as String, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               ],
             ),
           ),
@@ -520,28 +568,80 @@ class _ClientReportsScreenState extends State<ClientReportsScreen> {
       children: _items.map((item) {
         final vehicle = '${item.vehicleBrand ?? '-'} ${item.vehicleModel ?? '-'} (${item.vehiclePlate ?? '-'})';
         final dateText = item.createdAt != null ? DateFormat('dd/MM/yyyy HH:mm').format(item.createdAt!) : '-';
+        final statusColor = _statusColor(item.status);
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Emergencia #${item.incidentId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    Text('Emergencia #${item.incidentId}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: statusColor.withOpacity(0.14), borderRadius: BorderRadius.circular(999)),
+                      child: Text(_statusLabel(item.status), style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Text('Fecha: $dateText'),
-                Text('Estado: ${_statusLabel(item.status)}'),
                 Text('Tipo: ${item.classification ?? 'Sin clasificar'}'),
                 Text('Vehículo: $vehicle'),
                 Text('Taller: ${item.workshopName ?? '-'}'),
                 Text('Monto: ${item.paymentAmount.toStringAsFixed(2)}'),
                 Text('Método de pago: ${_paymentMethodLabel(item.paymentMethod ?? '')}'),
-                Text('Pagado: ${item.paymentIsPaid ? 'Sí' : 'No'}'),
+                Row(
+                  children: [
+                    const Text('Pagado: '),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: item.paymentIsPaid ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        item.paymentIsPaid ? 'Sí' : 'No',
+                        style: TextStyle(
+                          color: item.paymentIsPaid ? const Color(0xFF166534) : const Color(0xFFB91C1C),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         );
       }).toList(),
     );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return const Color(0xFFC2410C);
+      case 'waiting_offers':
+        return const Color(0xFFA16207);
+      case 'assigned':
+        return const Color(0xFF4338CA);
+      case 'accepted':
+        return const Color(0xFF7E22CE);
+      case 'in_progress':
+        return const Color(0xFF0E7490);
+      case 'completed':
+        return const Color(0xFF15803D);
+      case 'cancelled':
+        return const Color(0xFFB91C1C);
+      default:
+        return const Color(0xFF334155);
+    }
   }
 }
