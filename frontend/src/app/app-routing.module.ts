@@ -10,6 +10,7 @@ import { AdminClientManagementComponent } from './components/admin-client-manage
 import { AdminRentalManagementComponent } from './components/admin-rental-management/admin-rental-management.component';
 import { AdminBitacoraComponent } from './components/admin-bitacora/admin-bitacora.component';
 import { AuthGuard } from './guards/auth.guard';
+import { AdminWorkshopDetailComponent } from './components/admin-workshop-detail/admin-workshop-detail.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
@@ -19,6 +20,7 @@ const routes: Routes = [
   { path: 'workshop', component: WorkshopDashboardComponent, canActivate: [AuthGuard] },
   { path: 'reports/operational', component: OperationalReportsComponent, canActivate: [AuthGuard] },
   { path: 'admin/gestion-talleres', component: AdminWorkshopManagementComponent, canActivate: [AuthGuard] },
+  { path: 'admin/gestion-talleres/:id', component: AdminWorkshopDetailComponent, canActivate: [AuthGuard] },
   { path: 'admin/gestion-clientes', component: AdminClientManagementComponent, canActivate: [AuthGuard] },
   { path: 'admin/alquiler-autos', component: AdminRentalManagementComponent, canActivate: [AuthGuard] },
   { path: 'admin/bitacora', component: AdminBitacoraComponent, canActivate: [AuthGuard] },

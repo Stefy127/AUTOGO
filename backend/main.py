@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.config import settings
-from app.routers import auth, users, vehicles, incidents, workshops, payments, admin, rental_vehicles, audit_logs, technicians, offers, technician_portal, ai_analysis, notifications, reports
+from app.routers import auth, users, vehicles, incidents, workshops, payments, admin, admin_tenant, rental_vehicles, audit_logs, technicians, offers, technician_portal, ai_analysis, notifications, reports
 from pathlib import Path
 
 # Create database tables
@@ -78,6 +78,7 @@ app.include_router(technicians.router)
 app.include_router(technician_portal.router)
 app.include_router(payments.router)
 app.include_router(admin.router)
+app.include_router(admin_tenant.router)
 app.include_router(rental_vehicles.router)
 app.include_router(audit_logs.router)
 app.include_router(ai_analysis.router)

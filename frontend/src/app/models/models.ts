@@ -28,11 +28,133 @@ export interface Workshop {
   phone?: string;
   latitude?: number;
   longitude?: number;
+  commission_percentage?: number;
   commission_rate: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
   owner?: User;
+}
+
+export interface TenantWorkshop {
+  id: number;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  commission_percentage: number;
+  is_active: boolean;
+  owner_id: number;
+  owner_name: string | null;
+  owner_email: string | null;
+  owner_phone?: string | null;
+  technician_count: number;
+  active_technician_count: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TenantWorkshopOwnerOption {
+  id: number;
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+  has_workshop: boolean;
+  workshop_id?: number | null;
+}
+
+export interface TenantWorkshopCreateRequest {
+  owner_id: number;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  commission_percentage: number;
+  is_active: boolean;
+}
+
+export interface TenantWorkshopOwnerCreateRequest {
+  full_name: string;
+  email: string;
+  phone?: string | null;
+  password: string;
+}
+
+export interface TenantWorkshopDataCreateRequest {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  commission_percentage: number;
+  is_active: boolean;
+}
+
+export interface TenantWorkshopWithOwnerCreateRequest {
+  owner: TenantWorkshopOwnerCreateRequest;
+  workshop: TenantWorkshopDataCreateRequest;
+}
+
+export interface TenantWorkshopUpdateRequest {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  commission_percentage: number;
+  is_active: boolean;
+}
+
+export interface TenantWorkshopStatusRequest {
+  is_active: boolean;
+}
+
+export interface TenantWorkshopUserRow {
+  row_type: 'owner' | 'technician';
+  relation: string;
+  user_id: number | null;
+  technician_id: number | null;
+  workshop_id: number;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string;
+  is_active: boolean;
+  is_available: boolean | null;
+  access_code: string | null;
+}
+
+export interface TenantTechnicianCreateRequest {
+  full_name: string;
+  email: string;
+  password: string;
+  phone?: string | null;
+  is_active: boolean;
+  is_available: boolean;
+}
+
+export interface TenantTechnicianUpdateRequest {
+  full_name: string;
+  phone?: string | null;
+  is_active: boolean;
+  is_available: boolean;
+}
+
+export interface TenantTechnicianStatusRequest {
+  is_active: boolean;
+}
+
+export interface AdminWorkshopUser {
+  user_id?: number;
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  role?: 'client' | 'workshop' | 'technician' | 'admin';
+  relation: 'owner' | 'technician' | string;
+  workshop_id: number;
+  technician_id?: number;
+  is_active: boolean;
+  is_available?: boolean;
+  access_code?: string;
 }
 
 export interface Technician {
