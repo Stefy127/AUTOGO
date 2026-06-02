@@ -33,6 +33,10 @@
         <span class="nav-icon">🧾</span>
         <span class="nav-text" *ngIf="sidebarOpen">Bitácora</span>
       </a>
+      <a class="nav-item" *ngIf="isAdmin() || isWorkshop()" routerLink="/reports/operational">
+        <span class="nav-icon">📈</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Reportes Operacionales</span>
+      </a>
       <a class="nav-item" *ngIf="isClient()">
         <span class="nav-icon">🚗</span>
         <span class="nav-text" *ngIf="sidebarOpen">Mis Vehículos</span>

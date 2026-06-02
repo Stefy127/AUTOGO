@@ -17,6 +17,7 @@ import { AdminWorkshopManagementComponent } from './components/admin-workshop-ma
 import { AdminClientManagementComponent } from './components/admin-client-management/admin-client-management.component';
 import { AdminRentalManagementComponent } from './components/admin-rental-management/admin-rental-management.component';
 import { AdminBitacoraComponent } from './components/admin-bitacora/admin-bitacora.component';
+import { OperationalReportsComponent } from './components/operational-reports/operational-reports.component';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 import { AuditInterceptor } from './interceptors/audit.interceptor';
 
@@ -33,7 +34,8 @@ import { AuditInterceptor } from './interceptors/audit.interceptor';
     AdminWorkshopManagementComponent,
     AdminClientManagementComponent,
     AdminRentalManagementComponent,
-    AdminBitacoraComponent
+    AdminBitacoraComponent,
+    OperationalReportsComponent
   ],
   imports: [
     BrowserModule,

@@ -1,0 +1,437 @@
+﻿<div [ngClass]="isWorkshop() ? 'workshop-layout' : 'dashboard-container'">
+  <aside
+    class="sidebar"
+    [class.closed]="!sidebarOpen"
+    [class.open]="sidebarOpen"
+  >
+    <div class="sidebar-header" *ngIf="isAdmin()">
+      <div class="logo">
+        <span class="logo-icon">🚗</span>
+        <span class="logo-text" *ngIf="sidebarOpen">AutoGo</span>
+      </div>
+    </div>
+
+    <div class="sidebar-header" *ngIf="isWorkshop()">
+      <div class="logo">🔧</div>
+      <h2>{{ workshopName }}</h2>
+      <p class="subtitle">Panel de Control</p>
+    </div>
+
+    <nav class="sidebar-nav" *ngIf="isAdmin()">
+      <a class="nav-item" routerLink="/dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Dashboard</span>
+      </a>
+      <a class="nav-item">
+        <span class="nav-icon">🚨</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Emergencias</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/gestion-talleres">
+        <span class="nav-icon">🔧</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Gestión Talleres</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/gestion-clientes">
+        <span class="nav-icon">👥</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Gestión Clientes</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/alquiler-autos">
+        <span class="nav-icon">🚙</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Alquiler de Autos</span>
+      </a>
+      <a class="nav-item" routerLink="/admin/bitacora">
+        <span class="nav-icon">🧾</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Bitácora</span>
+      </a>
+      <a class="nav-item active" routerLink="/reports/operational">
+        <span class="nav-icon">📈</span>
+        <span class="nav-text" *ngIf="sidebarOpen">Reportes Operacionales</span>
+      </a>
+    </nav>
+
+    <nav class="sidebar-nav" *ngIf="isWorkshop()">
+      <button class="nav-item" (click)="goWorkshopView('dashboard')">
+        <span class="icon">📊</span>
+        <span *ngIf="sidebarOpen">Dashboard</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('edit-info')">
+        <span class="icon">⚙️</span>
+        <span *ngIf="sidebarOpen">Editar Información</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('add-technician')">
+        <span class="icon">👨‍🔧</span>
+        <span *ngIf="sidebarOpen">Agregar Mecánico</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('incidents-available')">
+        <span class="icon">🆕</span>
+        <span *ngIf="sidebarOpen">Emergencias Disponibles</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('incidents-history')">
+        <span class="icon">📜</span>
+        <span *ngIf="sidebarOpen">Historial</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('reports')">
+        <span class="icon">🧾</span>
+        <span *ngIf="sidebarOpen">Reporte</span>
+      </button>
+      <button class="nav-item active">
+        <span class="icon">📈</span>
+        <span *ngIf="sidebarOpen">Reportes Operacionales</span>
+      </button>
+      <button class="nav-item" (click)="goWorkshopView('notifications')">
+        <span class="icon">🔔</span>
+        <span *ngIf="sidebarOpen">Notificaciones</span>
+        <span class="badge-count" *ngIf="unreadNotificationsCount > 0">{{
+          unreadNotificationsCount
+        }}</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer" *ngIf="isAdmin()">
+      <div class="user-profile" *ngIf="currentUser">
+        <div class="user-avatar">
+          {{ currentUser.full_name.charAt(0).toUpperCase() }}
+        </div>
+        <div class="user-info" *ngIf="sidebarOpen">
+          <div class="user-name">{{ currentUser.full_name }}</div>
+          <div class="user-role">Administrador</div>
+        </div>
+      </div>
+      <button
+        class="btn-logout"
+        (click)="logout()"
+        [title]="sidebarOpen ? '' : 'Cerrar Sesión'"
+      >
+        <span class="logout-icon">🚪</span>
+        <span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesión</span>
+      </button>
+    </div>
+
+    <div class="sidebar-footer" *ngIf="isWorkshop()">
+      <button class="btn-delete-account" (click)="deleteMyAccount()">
+        🗑️ Eliminar Cuenta
+      </button>
+      <button class="btn-logout" (click)="logout()">🚪 Cerrar Sesión</button>
+    </div>
+  </aside>
+
+  <main class="main-content" [class.expanded]="!sidebarOpen">
+    <header class="top-bar" *ngIf="isAdmin()">
+      <button class="btn-toggle" (click)="toggleSidebar()">☰</button>
+      <h1 class="page-title">Reportes Operacionales</h1>
+      <div class="spacer"></div>
+    </header>
+
+    <header class="content-header" *ngIf="isWorkshop()">
+      <button class="sidebar-toggle-btn" (click)="toggleSidebar()">☰</button>
+      <h1>Reportes Operacionales</h1>
+    </header>
+
+    <div class="reports-page">
+      <header class="page-header">
+        <div>
+          <p>{{ roleDescription }}</p>
+        </div>
+      </header>
+
+      <section class="filters-card">
+        <div class="section-head">
+          <h2>Filtros</h2>
+          <p>
+            Define fechas, estado y alcance para consultar o exportar el
+            reporte.
+          </p>
+        </div>
+        <div class="filters-grid">
+          <div class="field">
+            <label>Fecha inicio</label>
+            <input type="date" [(ngModel)]="filters.start_date" />
+          </div>
+
+          <div class="field">
+            <label>Fecha fin</label>
+            <input type="date" [(ngModel)]="filters.end_date" />
+          </div>
+
+          <div class="field">
+            <label>Tipo de emergencia</label>
+            <input
+              type="text"
+              [(ngModel)]="filters.incident_type"
+              placeholder="Ej: battery"
+            />
+          </div>
+
+          <div class="field">
+            <label>Estado</label>
+            <select [(ngModel)]="filters.status">
+              <option
+                *ngFor="let option of statusOptions"
+                [value]="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Método de pago</label>
+            <select [(ngModel)]="filters.payment_method">
+              <option
+                *ngFor="let option of paymentMethodOptions"
+                [value]="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Técnico ID</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="filters.technician_id"
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div class="field" *ngIf="isAdmin()">
+            <label>Taller ID</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="filters.workshop_id"
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div class="field" *ngIf="isAdmin()">
+            <label>Cliente ID</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="filters.client_id"
+              placeholder="Opcional"
+            />
+          </div>
+
+          <div class="field" *ngIf="isAdmin()">
+            <label>Vehículo ID</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="filters.vehicle_id"
+              placeholder="Opcional"
+            />
+          </div>
+        </div>
+
+        <div class="filters-actions">
+          <button
+            class="btn-primary"
+            (click)="queryReports()"
+            [disabled]="loading"
+          >
+            Consultar
+          </button>
+          <button
+            class="btn-light"
+            (click)="clearFilters()"
+            [disabled]="loading"
+          >
+            Limpiar filtros
+          </button>
+          <button
+            class="btn-secondary"
+            (click)="exportPdf()"
+            [disabled]="exportingPdf"
+          >
+            Exportar PDF
+          </button>
+          <button
+            class="btn-secondary"
+            (click)="exportExcel()"
+            [disabled]="exportingExcel"
+          >
+            Exportar Excel
+          </button>
+        </div>
+      </section>
+
+      <section class="voice-card">
+        <div class="section-head">
+          <h2>Consulta por voz</h2>
+          <p>
+            Usa tu voz para llenar filtros o generar acciones rápidas. Habla
+            claro y cerca del micrófono.
+          </p>
+        </div>
+        <p class="voice-examples">
+          Ejemplos: “reporte de mayo completadas”, “reporte con cliente id 3”,
+          “últimos 7 días”.
+        </p>
+        <div class="voice-controls">
+          <button
+            class="mic-btn"
+            (click)="startVoiceCommand()"
+            [disabled]="voiceListening || voiceProcessing"
+            title="Usar voz"
+          >
+            <span>🎤</span>
+          </button>
+          <span class="voice-state">
+            {{
+              voiceListening
+                ? "Escuchando..."
+                : voiceProcessing
+                  ? "Procesando..."
+                  : "Usar voz"
+            }}
+          </span>
+        </div>
+        <div class="voice-controls">
+          <input
+            type="text"
+            class="voice-command-input"
+            [(ngModel)]="typedCommand"
+            placeholder="Escribe un comando, ej: reporte de mayo completadas en PDF"
+          />
+          <button
+            class="btn-primary"
+            (click)="applyTypedCommand()"
+            [disabled]="commandProcessing || voiceListening || voiceProcessing"
+          >
+            {{ commandProcessing ? "Procesando..." : "Aplicar comando" }}
+          </button>
+        </div>
+        <p class="voice-text" *ngIf="recognizedVoiceText">
+          Comando reconocido/procesado: "{{ recognizedVoiceText }}"
+        </p>
+        <p class="voice-error" *ngIf="voiceError">{{ voiceError }}</p>
+        <p class="voice-error-raw" *ngIf="lastVoiceErrorRaw">
+          Detalle técnico: {{ lastVoiceErrorRaw }}
+        </p>
+        <p class="voice-error" *ngIf="!voiceSupported">
+          Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.
+        </p>
+        <ul class="voice-warnings" *ngIf="voiceWarnings.length > 0">
+          <li *ngFor="let warning of voiceWarnings">{{ warning }}</li>
+        </ul>
+      </section>
+
+      <div class="alert error" *ngIf="error">{{ error }}</div>
+      <div class="alert success" *ngIf="successMessage">
+        {{ successMessage }}
+      </div>
+
+      <div *ngIf="loading" class="loading-state">Cargando reportes...</div>
+
+      <section class="kpi-grid" *ngIf="!loading">
+        <article class="kpi-card">
+          <h3>Total incidentes</h3>
+          <p>{{ summary.total_incidents || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Pendientes</h3>
+          <p>{{ summary.pending || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Asignados</h3>
+          <p>{{ summary.assigned || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>En progreso</h3>
+          <p>{{ summary.in_progress || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Completados</h3>
+          <p>{{ summary.completed || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Cancelados</h3>
+          <p>{{ summary.cancelled || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Monto total</h3>
+          <p>{{ summary.total_amount || 0 | number: "1.2-2" }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Ganancia taller</h3>
+          <p>{{ summary.total_workshop_earnings || 0 | number: "1.2-2" }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Pagos realizados</h3>
+          <p>{{ summary.total_paid || 0 }}</p>
+        </article>
+        <article class="kpi-card">
+          <h3>Pagos pendientes</h3>
+          <p>{{ summary.total_unpaid || 0 }}</p>
+        </article>
+      </section>
+
+      <section class="table-card" *ngIf="!loading">
+        <h2>Detalle</h2>
+
+        <div class="empty-state" *ngIf="report && items.length === 0">
+          No hay reportes para los filtros seleccionados.
+        </div>
+
+        <div class="table-wrapper" *ngIf="items.length > 0">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th>Tipo</th>
+                <th>Cliente</th>
+                <th>Vehículo</th>
+                <th>Taller</th>
+                <th>Técnico</th>
+                <th>Monto</th>
+                <th>Método pago</th>
+                <th>Pagado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of items">
+                <td>#{{ item.incident_id }}</td>
+                <td>{{ item.created_at | date: "yyyy-MM-dd HH:mm" }}</td>
+                <td>
+                  <span class="status-chip status-{{ item.status }}">{{
+                    getStatusLabel(item.status)
+                  }}</span>
+                </td>
+                <td>{{ item.classification || "Sin clasificar" }}</td>
+                <td>{{ item.client_name || "-" }}</td>
+                <td>
+                  {{
+                    (item.vehicle_brand || "-") +
+                      " " +
+                      (item.vehicle_model || "-")
+                  }}
+                  ({{ item.vehicle_plate || "-" }})
+                </td>
+                <td>{{ item.workshop_name || "-" }}</td>
+                <td>{{ item.technician_name || "-" }}</td>
+                <td>{{ item.payment_amount || 0 | number: "1.2-2" }}</td>
+                <td>{{ getPaymentMethodLabel(item.payment_method) }}</td>
+                <td>
+                  <span
+                    class="pay-chip"
+                    [ngClass]="item.payment_is_paid ? 'paid' : 'pending'"
+                    >{{ item.payment_is_paid ? "Sí" : "No" }}</span
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>

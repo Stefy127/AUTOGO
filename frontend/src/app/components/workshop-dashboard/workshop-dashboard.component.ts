@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { WorkshopService } from '../../services/workshop.service';
 import { IncidentService } from '../../services/incident.service';
@@ -74,12 +74,28 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private workshopService: WorkshopService,
     private incidentService: IncidentService,
+    private route: ActivatedRoute,
     private router: Router
   ) {}
 
   ngOnInit(): void {
     this.sidebarOpen = typeof window !== 'undefined' ? window.innerWidth > 768 : true;
     this.loadAllData();
+    this.route.queryParamMap.subscribe(params => {
+      const requested = params.get('view');
+      const allowedViews: Array<typeof this.currentView> = [
+        'dashboard',
+        'edit-info',
+        'add-technician',
+        'incidents-available',
+        'incidents-history',
+        'reports',
+        'notifications',
+      ];
+      if (requested && allowedViews.includes(requested as typeof this.currentView)) {
+        this.navigateTo(requested as typeof this.currentView);
+      }
+    });
     this.startNotificationPolling();
   }
 
