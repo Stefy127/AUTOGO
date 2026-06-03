@@ -284,6 +284,13 @@ class Offer(Base):
     technician_id = Column(Integer, ForeignKey("technicians.id"), nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     estimated_arrival_time = Column(Integer, nullable=True)
+    diagnosis_cost = Column(Numeric(10, 2), nullable=True)
+    labor_cost = Column(Numeric(10, 2), nullable=True)
+    parts_cost = Column(Numeric(10, 2), nullable=True)
+    transport_cost = Column(Numeric(10, 2), nullable=True)
+    additional_cost = Column(Numeric(10, 2), nullable=True)
+    repair_time_minutes = Column(Integer, nullable=True)
+    price_explanation = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     status = Column(Enum(OfferStatus), default=OfferStatus.PENDING, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -328,10 +335,18 @@ class Payment(Base):
     # Payment tracking
     paid_at = Column(DateTime, nullable=True)
     is_paid = Column(Boolean, default=False, nullable=False)
+    payment_type = Column(String, default="service", nullable=False)
+    payment_status = Column(String, default="pending", nullable=False)
     
     # Optional payment reference
     reference_number = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    original_amount_usd = Column(Numeric(10, 2), nullable=True)
+    exchange_rate_usd_to_bob = Column(Numeric(10, 2), nullable=True)
+    amount_bob = Column(Numeric(10, 2), nullable=True)
+    proof_image_url = Column(String, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    verified_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # CU25 - Stripe traceability fields (fase 1 preparación)
     stripe_session_id = Column(String, nullable=True)

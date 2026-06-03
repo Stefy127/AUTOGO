@@ -34,9 +34,11 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
 
   void _scheduleReconnect() {
     if (!mounted) return;
+    if (!_isTrackingActive) return;
     // Simple reconnect with 3s delay; avoid multiple concurrent attempts
     Future.delayed(const Duration(seconds: 3), () {
       if (!mounted) return;
+      if (!_isTrackingActive) return;
       if (_socket == null || _socket?.closeCode != null) {
         _connectSocket();
       }
@@ -74,7 +76,11 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
   double? _technicianLatitude;
   double? _technicianLongitude;
   String? _routePolyline;
+  String? _fullRoutePolyline;
   DateTime? _lastUpdateAt;
+
+  bool get _isTrackingActive =>
+      _status == 'accepted' || _status == 'assigned' || _status == 'on_route';
 
   @override
   void initState() {
@@ -86,6 +92,7 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
     _remainingDistanceMeters = widget.incident.remainingDistanceMeters;
     _estimatedArrivalTime = widget.incident.estimatedArrivalTime;
     _routePolyline = widget.incident.routePolyline;
+    _fullRoutePolyline = widget.incident.routePolyline;
     _lastUpdateAt = widget.incident.lastEtaUpdateAt;
     _technicianLatitude = widget.incident.technician?.currentLatitude;
     _technicianLongitude = widget.incident.technician?.currentLongitude;
@@ -94,8 +101,10 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_socket == null) {
+    if (_socket == null && _isTrackingActive) {
       _connectSocket();
+    } else if (!_isTrackingActive) {
+      _connecting = false;
     }
   }
 
@@ -157,6 +166,64 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
     }
 
     return coordinates;
+  }
+
+  String? _encodePolyline(List<Position> coordinates) {
+    if (coordinates.isEmpty) return null;
+
+    final buffer = StringBuffer();
+    int lastLat = 0;
+    int lastLng = 0;
+
+    for (final position in coordinates) {
+      final lat = (position.lat * 1e5).round();
+      final lng = (position.lng * 1e5).round();
+
+      _encodeValue(buffer, lat - lastLat);
+      _encodeValue(buffer, lng - lastLng);
+
+      lastLat = lat;
+      lastLng = lng;
+    }
+
+    return buffer.toString();
+  }
+
+  void _encodeValue(StringBuffer buffer, int value) {
+    var shifted = value < 0 ? ~(value << 1) : (value << 1);
+    while (shifted >= 0x20) {
+      buffer.writeCharCode((0x20 | (shifted & 0x1f)) + 63);
+      shifted >>= 5;
+    }
+    buffer.writeCharCode(shifted + 63);
+  }
+
+  List<Position> _trimRouteCoordinates(List<Position> coordinates) {
+    if (coordinates.length < 2 || _technicianLatitude == null || _technicianLongitude == null) {
+      return coordinates;
+    }
+
+    var nearestIndex = 0;
+    var nearestDistance = double.infinity;
+    for (var index = 0; index < coordinates.length; index++) {
+      final position = coordinates[index];
+      final distance = _haversineDistanceMeters(
+        _technicianLatitude!,
+        _technicianLongitude!,
+        position.lat.toDouble(),
+        position.lng.toDouble(),
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    }
+
+    final trimmed = coordinates.sublist(nearestIndex);
+    if (trimmed.length < 2) {
+      return coordinates;
+    }
+    return trimmed;
   }
 
   Future<Uint8List> _buildPinBytes(Color color) async {
@@ -282,9 +349,12 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
         );
       }
 
-      if (_routePolyline != null && _routePolyline!.isNotEmpty) {
-        final coords = _decodePolyline(_routePolyline!);
+      final activePolyline = _fullRoutePolyline ?? _routePolyline;
+      if (activePolyline != null && activePolyline.isNotEmpty) {
+        final coords = _decodePolyline(activePolyline);
         if (coords.length > 1) {
+          final visibleCoords = _trimRouteCoordinates(coords);
+
           // remove previous start/end markers
           if (_routeStartMarker != null) {
             await pointManager.delete(_routeStartMarker!);
@@ -297,15 +367,15 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
 
           _routePolylineAnnotation = await lineManager.create(
             PolylineAnnotationOptions(
-              geometry: LineString(coordinates: coords),
+              geometry: LineString(coordinates: visibleCoords),
               lineColor: 0xFF2563EB,
               lineWidth: 6,
             ),
           );
 
           // Create start and end markers for the route to improve visibility
-          final start = coords.first;
-          final end = coords.last;
+          final start = visibleCoords.first;
+          final end = visibleCoords.last;
           _routeStartMarker = await pointManager.create(
             PointAnnotationOptions(
               geometry: Point(coordinates: start),
@@ -389,6 +459,14 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
   }
 
   Future<void> _connectSocket() async {
+    if (!_isTrackingActive) {
+      if (!mounted) return;
+      setState(() {
+        _connecting = false;
+      });
+      return;
+    }
+
     final authService = Provider.of<AuthService>(context, listen: false);
     final token = authService.token;
     if (token == null || token.isEmpty) {
@@ -452,7 +530,12 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
 
       setState(() {
           if (type == 'status_update') {
-          _status = data['status']?.toString() ?? _status;
+            final newStatus = data['status']?.toString() ?? _status;
+            _status = newStatus;
+            if (!_isTrackingActive) {
+              _socket?.close();
+              _socket = null;
+            }
         }
 
         if (type == 'tracking_update') {
@@ -472,7 +555,11 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
           // Debug prints for distance and ETA
           // ignore: avoid_print
           print('tracking_update: remaining_distance_meters=$_remainingDistanceMeters, eta_seconds=$etaSeconds');
-          _routePolyline = data['route_polyline']?.toString() ?? _routePolyline;
+          final incomingRoutePolyline = data['route_polyline']?.toString();
+          if (incomingRoutePolyline != null && incomingRoutePolyline.isNotEmpty) {
+            _fullRoutePolyline = incomingRoutePolyline;
+            _routePolyline = incomingRoutePolyline;
+          }
           _lastUpdateAt = DateTime.now();
         }
         if (type == 'notification') {
@@ -533,6 +620,13 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
     if (_mapboxToken.isEmpty) {
       return _buildMapFallback(
         message: 'MAPBOX_ACCESS_TOKEN no está configurado en Flutter',
+      );
+    }
+
+    if (!_isTrackingActive) {
+      return _buildMapFallback(
+        message:
+            'El seguimiento terminó porque la atención ya inició o el incidente fue cerrado.',
       );
     }
 
@@ -723,7 +817,7 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
                   const SizedBox(height: 16),
                   _buildInteractiveMap(),
                   const SizedBox(height: 16),
-                  if (_routePolyline != null)
+                  if (_fullRoutePolyline != null)
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -735,9 +829,9 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
-                            SelectableText(
-                              _routePolyline!,
-                              style: const TextStyle(fontSize: 12),
+                            const Text(
+                              'La ruta se actualiza automáticamente y solo se muestra el tramo restante.',
+                              style: TextStyle(fontSize: 12),
                             ),
                           ],
                         ),

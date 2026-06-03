@@ -25,10 +25,10 @@ ACTIVE_TRACKING_STATUSES = [
 ]
 
 VALID_STATUS_TRANSITIONS = {
-    models.IncidentStatus.ASSIGNED: [models.IncidentStatus.ON_ROUTE, models.IncidentStatus.CANCELLED],
-    models.IncidentStatus.ACCEPTED: [models.IncidentStatus.ON_ROUTE, models.IncidentStatus.CANCELLED],
-    models.IncidentStatus.ON_ROUTE: [models.IncidentStatus.IN_SERVICE, models.IncidentStatus.CANCELLED],
-    models.IncidentStatus.IN_SERVICE: [models.IncidentStatus.COMPLETED, models.IncidentStatus.CANCELLED],
+    models.IncidentStatus.ASSIGNED: [models.IncidentStatus.ON_ROUTE, models.IncidentStatus.CANCELLED, models.IncidentStatus.WAITING_OFFERS],
+    models.IncidentStatus.ACCEPTED: [models.IncidentStatus.ON_ROUTE, models.IncidentStatus.CANCELLED, models.IncidentStatus.WAITING_OFFERS],
+    models.IncidentStatus.ON_ROUTE: [models.IncidentStatus.IN_SERVICE, models.IncidentStatus.CANCELLED, models.IncidentStatus.WAITING_OFFERS],
+    models.IncidentStatus.IN_SERVICE: [models.IncidentStatus.COMPLETED, models.IncidentStatus.CANCELLED, models.IncidentStatus.WAITING_OFFERS],
     models.IncidentStatus.IN_PROGRESS: [models.IncidentStatus.COMPLETED, models.IncidentStatus.CANCELLED],
 }
 
@@ -271,8 +271,30 @@ async def update_technician_incident_status(
             detail=f"Invalid status transition from {incident.status} to {new_status}"
         )
 
-    incident.status = new_status
-    technician.is_available = new_status in [models.IncidentStatus.COMPLETED, models.IncidentStatus.CANCELLED]
+    if new_status == models.IncidentStatus.CANCELLED:
+        technician.is_available = True
+        accepted_offer = db.query(models.Offer).filter(
+            models.Offer.incident_id == incident.id,
+            models.Offer.status == models.OfferStatus.ACCEPTED,
+        ).first()
+        if accepted_offer:
+            accepted_offer.status = models.OfferStatus.REJECTED
+        existing_payment = db.query(models.Payment).filter(
+            models.Payment.incident_id == incident.id
+        ).first()
+        if existing_payment and (existing_payment.payment_type or "service") == "service":
+            existing_payment.payment_status = "rejected"
+            existing_payment.is_paid = False
+            existing_payment.notes = "Servicio cancelado por técnico; pago de servicio anulado"
+        incident.technician_id = None
+        incident.workshop_id = None
+        incident.estimated_arrival_time = None
+        incident.remaining_distance_meters = None
+        incident.route_polyline = None
+        incident.status = models.IncidentStatus.WAITING_OFFERS
+    else:
+        incident.status = new_status
+        technician.is_available = new_status == models.IncidentStatus.COMPLETED
 
     notification_payload = None
 
@@ -351,7 +373,7 @@ async def update_technician_incident_status(
         incident_id=incident.id,
         status=incident.status,
         changed_by_user_id=_incident_changed_by_user_id(technician, incident),
-        notes=f"Estado actualizado por técnico {technician.name}"
+        notes=(f"Servicio cancelado por tecnico {technician.name}. Motivo: {payload.reason.strip()}" if new_status == models.IncidentStatus.CANCELLED and payload.reason and payload.reason.strip() else f"Estado actualizado por tecnico {technician.name}")
     )
     db.add(history)
 
@@ -586,3 +608,4 @@ def confirm_technician_payment(
     db.commit()
     db.refresh(payment)
     return payment
+

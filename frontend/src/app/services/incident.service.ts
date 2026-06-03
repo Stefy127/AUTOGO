@@ -33,8 +33,8 @@ export class IncidentService {
     return this.http.get<IncidentHistory[]>(`${this.apiUrl}/${id}/history`);
   }
 
-  cancelIncident(id: number): Observable<Incident> {
-    return this.updateIncident(id, { status: 'cancelled' });
+  cancelIncident(id: number, reason?: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/${id}/cancel`, { reason });
   }
 
   completeIncident(id: number): Observable<Incident> {

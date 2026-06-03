@@ -92,6 +92,35 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
     }
   }
 
+  Widget _costRow(String label, double value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          Text('\$${value.toStringAsFixed(2)}'),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailText(String label, String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 3),
+          Text(value),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,16 +199,48 @@ class _EmergencyOffersScreenState extends State<EmergencyOffersScreen> {
                               ],
                             ),
                             const SizedBox(height: 8),
-                            Text('Monto: \$${offer.amount.toStringAsFixed(2)}'),
+                            Text(
+                              'Total: \$${offer.amount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                             if (offer.estimatedArrivalTime != null)
                               Text(
                                 'Llegada estimada: ${offer.estimatedArrivalTime} min',
                               ),
+                            if (offer.repairTimeMinutes != null)
+                              Text(
+                                'Reparacion estimada: ${offer.repairTimeMinutes} min',
+                              ),
                             if (offer.technician != null)
                               Text('Tecnico: ${offer.technician!.name}'),
-                            if (offer.notes != null &&
-                                offer.notes!.trim().isNotEmpty)
-                              Text('Notas: ${offer.notes}'),
+                            const SizedBox(height: 8),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              childrenPadding:
+                                  const EdgeInsets.only(bottom: 8),
+                              title: const Text(
+                                'Ver detalle',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              children: [
+                                _costRow(
+                                    'Diagnostico', offer.diagnosisCost),
+                                _costRow('Mano de obra', offer.laborCost),
+                                _costRow('Repuestos', offer.partsCost),
+                                _costRow('Traslado', offer.transportCost),
+                                _costRow('Adicionales', offer.additionalCost),
+                                const Divider(),
+                                _costRow('Total', offer.amount),
+                                _detailText(
+                                  'Explicacion tecnica',
+                                  offer.priceExplanation,
+                                ),
+                                _detailText('Notas', offer.notes),
+                              ],
+                            ),
                             const SizedBox(height: 12),
                             SizedBox(
                               width: double.infinity,

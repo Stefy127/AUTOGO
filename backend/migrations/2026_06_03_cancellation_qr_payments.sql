@@ -1,0 +1,8 @@
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_type VARCHAR DEFAULT 'service';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_status VARCHAR DEFAULT 'pending';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS original_amount_usd NUMERIC(10,2);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS exchange_rate_usd_to_bob NUMERIC(10,2);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount_bob NUMERIC(10,2);
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS proof_image_url VARCHAR;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by_user_id INTEGER REFERENCES users(id);

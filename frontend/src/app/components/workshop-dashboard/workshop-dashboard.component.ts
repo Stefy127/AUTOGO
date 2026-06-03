@@ -3,7 +3,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { WorkshopService } from '../../services/workshop.service';
 import { IncidentService } from '../../services/incident.service';
-import { Workshop, Technician, Incident, WorkshopStats, AppNotification } from '../../models/models';
+import { PaymentService } from '../../services/payment.service';
+import { Workshop, Technician, Incident, WorkshopStats, AppNotification, CancellationPaymentPending } from '../../models/models';
 import { LocationData } from '../map-picker/map-picker.component';
 
 @Component({
@@ -50,6 +51,8 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   notifications: AppNotification[] = [];
   unreadNotificationsCount = 0;
   loadingNotifications = false;
+  cancellationPayments: CancellationPaymentPending[] = [];
+  loadingCancellationPayments = false;
   private notificationPollTimer: number | null = null;
 
   // Accept incident modal state
@@ -57,11 +60,18 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   selectedIncident: Incident | null = null;
   acceptForm = {
     technician_id: undefined as number | undefined,
-    amount: undefined as number | undefined
+    diagnosis_cost: undefined as number | undefined,
+    labor_cost: undefined as number | undefined,
+    parts_cost: undefined as number | undefined,
+    transport_cost: undefined as number | undefined,
+    additional_cost: undefined as number | undefined,
+    repair_time_minutes: undefined as number | undefined,
+    price_explanation: '',
+    notes: ''
   };
 
   // Navigation state
-  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications' = 'dashboard';
+  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications' | 'cancellation-payments' = 'dashboard';
 
   reportFilters = {
     startDate: '',
@@ -74,6 +84,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private workshopService: WorkshopService,
     private incidentService: IncidentService,
+    private paymentService: PaymentService,
     private route: ActivatedRoute,
     private router: Router
   ) {}
@@ -91,6 +102,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
         'incidents-history',
         'reports',
         'notifications',
+        'cancellation-payments',
       ];
       if (requested && allowedViews.includes(requested as typeof this.currentView)) {
         this.navigateTo(requested as typeof this.currentView);
@@ -128,6 +140,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
         this.loadAvailableIncidents();
         this.loadMyIncidents();
         this.loadPaymentQr();
+        this.loadCancellationPayments(true);
         this.loading = false;
       },
       error: (error) => {
@@ -275,13 +288,16 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  navigateTo(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications'): void {
+  navigateTo(view: typeof this.currentView): void {
     this.currentView = view;
     if (view === 'incidents-history') {
       this.loadIncidentHistory();
     }
     if (view === 'notifications') {
       this.loadNotifications();
+    }
+    if (view === 'cancellation-payments') {
+      this.loadCancellationPayments();
     }
   }
 
@@ -608,29 +624,63 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     // Reset form
     this.acceptForm = {
       technician_id: this.technicians.length > 0 ? this.technicians[0].id : undefined,
-      amount: undefined
+      diagnosis_cost: undefined,
+      labor_cost: undefined,
+      parts_cost: undefined,
+      transport_cost: undefined,
+      additional_cost: undefined,
+      repair_time_minutes: undefined,
+      price_explanation: '',
+      notes: ''
     };
   }
 
+  private parseQuoteAmount(value: number | string | undefined): number {
+    if (value === undefined || value === null || value === '') {
+      return 0;
+    }
+    const parsed = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  getQuoteTotal(): number {
+    return [
+      this.acceptForm.diagnosis_cost,
+      this.acceptForm.labor_cost,
+      this.acceptForm.parts_cost,
+      this.acceptForm.transport_cost,
+      this.acceptForm.additional_cost
+    ].reduce<number>((total, value) => total + this.parseQuoteAmount(value), 0);
+  }
+
   confirmAcceptIncident(): void {
-    if (!this.selectedIncident?.id || !this.acceptForm.technician_id || !this.acceptForm.amount) {
-      this.error = 'Debes seleccionar un mecánico e ingresar el monto estimado';
+    if (!this.selectedIncident?.id || !this.acceptForm.technician_id) {
+      this.error = 'Debes seleccionar un mecanico';
       return;
     }
 
-    const amount = typeof this.acceptForm.amount === 'string' 
-      ? parseFloat(this.acceptForm.amount) 
-      : this.acceptForm.amount;
+    const quotePayload = {
+      technician_id: this.acceptForm.technician_id,
+      diagnosis_cost: this.parseQuoteAmount(this.acceptForm.diagnosis_cost),
+      labor_cost: this.parseQuoteAmount(this.acceptForm.labor_cost),
+      parts_cost: this.parseQuoteAmount(this.acceptForm.parts_cost),
+      transport_cost: this.parseQuoteAmount(this.acceptForm.transport_cost),
+      additional_cost: this.parseQuoteAmount(this.acceptForm.additional_cost),
+      repair_time_minutes: this.acceptForm.repair_time_minutes
+        ? Number(this.acceptForm.repair_time_minutes)
+        : undefined,
+      price_explanation: this.acceptForm.price_explanation?.trim() || undefined,
+      notes: this.acceptForm.notes?.trim() || undefined
+    };
 
-    if (isNaN(amount) || amount <= 0) {
-      this.error = 'El monto debe ser un número válido mayor que 0';
+    if (this.getQuoteTotal() <= 0) {
+      this.error = 'La cotizacion debe tener un monto total mayor a 0';
       return;
     }
 
     this.workshopService.createOffer(
-      this.selectedIncident.id, 
-      this.acceptForm.technician_id,
-      amount
+      this.selectedIncident.id,
+      quotePayload
     ).subscribe({
       next: () => {
         this.loadAvailableIncidents();
@@ -650,12 +700,55 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadCancellationPayments(silent = false): void {
+    if (!silent) {
+      this.loadingCancellationPayments = true;
+    }
+
+    this.paymentService.getPendingCancellationPayments().subscribe({
+      next: (payments) => {
+        this.cancellationPayments = payments;
+        this.loadingCancellationPayments = false;
+      },
+      error: (error) => {
+        console.error('Error loading cancellation payments:', error);
+        this.loadingCancellationPayments = false;
+      }
+    });
+  }
+
+  verifyCancellationPayment(payment: CancellationPaymentPending, approved: boolean): void {
+    const notes = approved ? 'Pago verificado correctamente' : prompt('Motivo del rechazo') || undefined;
+    if (!approved && !notes) {
+      return;
+    }
+
+    this.paymentService.verifyCancellationQrPayment(payment.payment_id, approved, notes).subscribe({
+      next: (response) => {
+        this.successMessage = response.message;
+        this.error = '';
+        this.loadCancellationPayments(true);
+        this.loadNotifications(true);
+        setTimeout(() => this.successMessage = '', 3000);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo actualizar el pago por cancelacion';
+      }
+    });
+  }
   cancelAcceptIncident(): void {
     this.showAcceptModal = false;
     this.selectedIncident = null;
     this.acceptForm = {
       technician_id: undefined,
-      amount: undefined
+      diagnosis_cost: undefined,
+      labor_cost: undefined,
+      parts_cost: undefined,
+      transport_cost: undefined,
+      additional_cost: undefined,
+      repair_time_minutes: undefined,
+      price_explanation: '',
+      notes: ''
     };
   }
 
@@ -668,6 +761,26 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.error = 'Error al rechazar la emergencia';
+      }
+    });
+  }
+
+  cancelAssignedService(incident: Incident): void {
+    if (!incident.id) return;
+
+    const reason = prompt('Motivo opcional de cancelacion') || undefined;
+    this.incidentService.cancelIncident(incident.id, reason).subscribe({
+      next: (response) => {
+        this.successMessage = response.message || 'Servicio cancelado. La emergencia volvera a espera de cotizaciones.';
+        this.error = '';
+        this.loadMyIncidents();
+        this.loadAvailableIncidents();
+        this.loadTechnicians();
+        this.loadNotifications(true);
+        setTimeout(() => this.successMessage = '', 4000);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo cancelar el servicio';
       }
     });
   }
@@ -776,3 +889,4 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     });
   }
 }
+

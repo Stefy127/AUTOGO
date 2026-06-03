@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -23,6 +25,11 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
   List<Incident> _incidents = [];
   bool _isLoading = true;
   int? _stripeLoadingPaymentId;
+  int? _cancelLoadingIncidentId;
+  Timer? _etaRefreshTimer;
+  XFile? _selectedCancellationProof;
+  Uint8List? _selectedCancellationProofBytes;
+  bool _sendingCancellationProof = false;
 
   @override
   void initState() {
@@ -31,6 +38,10 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
     _etaRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  void _showIncidentDetailsLive(Incident incident) {
+    _showIncidentDetails(incident);
   }
 
   @override
@@ -184,6 +195,297 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
         ),
       );
     }
+  }
+
+  bool _canCancelIncident(Incident incident) {
+    return incident.id != null &&
+        ['pending', 'waiting_offers', 'assigned', 'accepted', 'on_route', 'in_service', 'in_progress']
+            .contains(incident.status);
+  }
+
+  Future<void> _cancelIncident(Incident incident) async {
+    final reasonController = TextEditingController();
+    final requiresReason = incident.status == 'in_service' || incident.status == 'in_progress';
+    final warning = incident.status == 'on_route'
+        ? 'El tecnico ya esta en camino. Se generara un pago por cancelacion del 20%.'
+      : (incident.status == 'in_service' || incident.status == 'in_progress')
+            ? 'La atencion ya inicio. Se generara un pago parcial del 50%.'
+            : 'El servicio se cancelara sin cobro.';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Cancelar servicio'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(warning),
+              if (requiresReason) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    labelText: 'Motivo obligatorio',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Volver'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (requiresReason && reasonController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('Ingresa el motivo de cancelacion')),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || incident.id == null) return;
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+
+    setState(() => _cancelLoadingIncidentId = incident.id);
+
+    try {
+      final response = await apiService.post(
+        '/incidents/${incident.id}/cancel',
+        {'reason': reasonController.text.trim().isEmpty ? null : reasonController.text.trim()},
+        token: authService.token,
+      ) as Map<String, dynamic>;
+
+      if (!mounted) return;
+      setState(() => _cancelLoadingIncidentId = null);
+
+      if (response['requires_payment'] == true) {
+        await _showCancellationPayment(response);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response['message']?.toString() ?? 'Servicio cancelado')),
+        );
+      }
+
+      Navigator.pop(context);
+      await _loadIncidents();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _cancelLoadingIncidentId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo cancelar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showCancellationPayment(Map<String, dynamic> data) async {
+    final paymentId = data['payment_id'] as int?;
+    final qrUrl = data['qr_image_url']?.toString() ?? '';
+    _selectedCancellationProof = null;
+    _selectedCancellationProofBytes = null;
+    _sendingCancellationProof = false;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Future<void> pickProofImage() async {
+              try {
+                final picker = ImagePicker();
+                final image = await picker.pickImage(
+                  source: ImageSource.gallery,
+                  imageQuality: 85,
+                );
+                if (image == null) return;
+
+                final bytes = await image.readAsBytes();
+                setDialogState(() {
+                  _selectedCancellationProof = image;
+                  _selectedCancellationProofBytes = bytes;
+                });
+              } catch (e) {
+                if (!dialogContext.mounted) return;
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('No se pudo seleccionar el comprobante: $e')),
+                );
+              }
+            }
+
+            Future<void> submitPayment() async {
+              if (paymentId == null) return;
+              if (_selectedCancellationProofBytes == null) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(content: Text('Adjunta un comprobante de pago')),
+                );
+                return;
+              }
+
+              setDialogState(() => _sendingCancellationProof = true);
+              try {
+                final authService = Provider.of<AuthService>(context, listen: false);
+                final apiService = Provider.of<ApiService>(context, listen: false);
+                final mimeType = _selectedCancellationProof?.name.toLowerCase().endsWith('.png') == true
+                    ? 'image/png'
+                    : 'image/jpeg';
+                final proofDataUrl =
+                    'data:$mimeType;base64,${base64Encode(_selectedCancellationProofBytes!)}';
+                final referenceNumber =
+                    'AG-CANCEL-${data['incident_id'] ?? paymentId}-${DateTime.now().millisecondsSinceEpoch}';
+
+                await apiService.post(
+                  '/payments/$paymentId/confirm-qr-payment',
+                  {
+                    'reference_number': referenceNumber,
+                    'proof_image_url': proofDataUrl,
+                  },
+                  token: authService.token,
+                );
+
+                if (!dialogContext.mounted) return;
+                Navigator.pop(dialogContext);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Pago enviado para verificacion del taller.')),
+                );
+              } catch (e) {
+                if (!dialogContext.mounted) return;
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(content: Text('No se pudo enviar el comprobante: $e')),
+                );
+              } finally {
+                if (dialogContext.mounted) {
+                  setDialogState(() => _sendingCancellationProof = false);
+                }
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Pago por cancelacion'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Cotizacion aceptada: \$${(data['original_offer_amount_usd'] ?? 0).toString()} USD'),
+                    Text('Porcentaje aplicado: ${data['cancellation_percentage']}%'),
+                    Text('Monto en USD: \$${(data['penalty_amount_usd'] ?? 0).toString()}'),
+                    Text('Tipo de cambio: ${data['exchange_rate_usd_to_bob']} Bs'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pague exactamente ${data['penalty_amount_bob']} Bs.',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (qrUrl.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Center(child: _buildQrImage(qrUrl)),
+                    ],
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _sendingCancellationProof ? null : pickProofImage,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Adjuntar comprobante'),
+                    ),
+                    if (_selectedCancellationProofBytes != null) ...[
+                      const SizedBox(height: 12),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.memory(
+                          _selectedCancellationProofBytes!,
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _selectedCancellationProof?.name ?? 'Comprobante adjuntado',
+                        style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Adjunta una foto o captura del comprobante para continuar.',
+                        style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: _sendingCancellationProof || _selectedCancellationProofBytes == null
+                    ? null
+                    : submitPayment,
+                  child: _sendingCancellationProof
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Ya realice el pago'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildQrImage(String qrUrl) {
+    if (qrUrl.startsWith('data:image')) {
+      final commaIndex = qrUrl.indexOf(',');
+      if (commaIndex != -1 && commaIndex + 1 < qrUrl.length) {
+        final base64Data = qrUrl.substring(commaIndex + 1);
+        try {
+          final bytes = base64Decode(base64Data);
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(bytes, height: 220, fit: BoxFit.contain),
+          );
+        } catch (_) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.orange.shade50,
+            child: const Text('Formato de imagen QR inválido'),
+          );
+        }
+      }
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        qrUrl,
+        height: 220,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.orange.shade50,
+          child: const Text('No se pudo cargar la imagen QR'),
+        ),
+      ),
+    );
   }
 
   @override
@@ -799,10 +1101,33 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                     ],
 
                   ],
-                  if (incident.id != null &&
+                  if (_canCancelIncident(incident)) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _cancelLoadingIncidentId == incident.id
+                            ? null
+                            : () => _cancelIncident(incident),
+                        icon: _cancelLoadingIncidentId == incident.id
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.cancel_outlined),
+                        label: Text(
+                          _cancelLoadingIncidentId == incident.id
+                              ? 'Cancelando...'
+                              : 'Cancelar servicio',
+                        ),
+                      ),
+                    ),
+                  ],
+                    if (incident.id != null &&
                       (incident.status == 'pending' ||
-                          incident.status == 'waiting_offers' ||
-                          incident.status == 'assigned')) ...[
+                        incident.status == 'waiting_offers' ||
+                        incident.status == 'assigned')) ...[
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -822,6 +1147,49 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                         },
                         icon: const Icon(Icons.local_offer),
                         label: const Text('Ver Ofertas de Talleres'),
+                      ),
+                    ),
+                  ],
+                  if (incident.id != null &&
+                      (incident.status == 'assigned' ||
+                          incident.status == 'accepted' ||
+                          incident.status == 'on_route')) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => IncidentTrackingScreen(incident: incident),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.route),
+                        label: const Text('Ver Seguimiento'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (incident.id != null &&
+                      (incident.status == 'in_service' ||
+                          incident.status == 'in_progress')) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: const Text(
+                        'La atención ya inició. El seguimiento en tiempo real ya no se muestra en esta etapa.',
+                        style: TextStyle(fontSize: 14),
                       ),
                     ),
                   ],

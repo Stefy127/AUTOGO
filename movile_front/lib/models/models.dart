@@ -137,6 +137,13 @@ class Offer {
   final int? technicianId;
   final double amount;
   final int? estimatedArrivalTime;
+  final int? repairTimeMinutes;
+  final double diagnosisCost;
+  final double laborCost;
+  final double partsCost;
+  final double transportCost;
+  final double additionalCost;
+  final String? priceExplanation;
   final String? notes;
   final String status;
   final DateTime createdAt;
@@ -150,6 +157,13 @@ class Offer {
     this.technicianId,
     required this.amount,
     this.estimatedArrivalTime,
+    this.repairTimeMinutes,
+    this.diagnosisCost = 0,
+    this.laborCost = 0,
+    this.partsCost = 0,
+    this.transportCost = 0,
+    this.additionalCost = 0,
+    this.priceExplanation,
     this.notes,
     required this.status,
     required this.createdAt,
@@ -158,13 +172,20 @@ class Offer {
   });
 
   factory Offer.fromJson(Map<String, dynamic> json) {
-    final rawAmount = json['amount'];
-    final parsedAmount = rawAmount is num
-        ? rawAmount.toDouble()
-        : double.tryParse(rawAmount?.toString() ?? '') ?? 0;
+    double parseMoney(dynamic value) {
+      return value is num
+          ? value.toDouble()
+          : double.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    int? parseInt(dynamic value) {
+      return value is int ? value : int.tryParse(value?.toString() ?? '');
+    }
+
+    final parsedAmount = parseMoney(json['amount']);
 
     final rawEta = json['estimated_arrival_time'];
-    final parsedEta = rawEta is int ? rawEta : int.tryParse(rawEta?.toString() ?? '');
+    final parsedEta = parseInt(rawEta);
     // Backend stores ETA as seconds (for incidents and offers). Convert to minutes for display in the mobile UI.
     final parsedEtaMinutes = parsedEta != null ? (parsedEta ~/ 60) : null;
 
@@ -175,6 +196,13 @@ class Offer {
       technicianId: json['technician_id'],
       amount: parsedAmount,
       estimatedArrivalTime: parsedEtaMinutes,
+      repairTimeMinutes: parseInt(json['repair_time_minutes']),
+      diagnosisCost: parseMoney(json['diagnosis_cost']),
+      laborCost: parseMoney(json['labor_cost']),
+      partsCost: parseMoney(json['parts_cost']),
+      transportCost: parseMoney(json['transport_cost']),
+      additionalCost: parseMoney(json['additional_cost']),
+      priceExplanation: json['price_explanation'],
       notes: json['notes'],
       status: (json['status']?.toString() ?? 'pending').toLowerCase(),
       createdAt: DateTime.parse(json['created_at']),
@@ -196,6 +224,11 @@ class Payment {
   final double workshopAmount;
   final String paymentMethod;
   final String status;
+  final String paymentType;
+  final double? amountBob;
+  final double? exchangeRateUsdToBob;
+  final String? referenceNumber;
+  final String? proofImageUrl;
   final DateTime? paidAt;
   final DateTime createdAt;
 
@@ -208,20 +241,41 @@ class Payment {
     required this.workshopAmount,
     required this.paymentMethod,
     required this.status,
+    this.paymentType = 'service',
+    this.amountBob,
+    this.exchangeRateUsdToBob,
+    this.referenceNumber,
+    this.proofImageUrl,
     this.paidAt,
     required this.createdAt,
   });
 
   factory Payment.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic value) {
+      return value is num
+          ? value.toDouble()
+          : double.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    double? parseNullableDouble(dynamic value) {
+      if (value == null) return null;
+      return value is num ? value.toDouble() : double.tryParse(value.toString());
+    }
+
     return Payment(
       id: json['id'],
       incidentId: json['incident_id'],
-      amount: json['amount']?.toDouble() ?? 0,
-      commissionRate: json['commission_percentage']?.toDouble() ?? 0,
-      commissionAmount: json['commission_amount']?.toDouble() ?? 0,
-      workshopAmount: json['workshop_earnings']?.toDouble() ?? 0,
-      paymentMethod: json['payment_method'],
-      status: json['is_paid'] == true ? 'paid' : 'pending',
+      amount: parseDouble(json['amount']),
+      commissionRate: parseDouble(json['commission_percentage']),
+      commissionAmount: parseDouble(json['commission_amount']),
+      workshopAmount: parseDouble(json['workshop_earnings']),
+      paymentMethod: json['payment_method']?.toString() ?? '',
+      status: (json['payment_status'] ?? (json['is_paid'] == true ? 'paid' : 'pending')).toString(),
+      paymentType: json['payment_type']?.toString() ?? 'service',
+      amountBob: parseNullableDouble(json['amount_bob']),
+      exchangeRateUsdToBob: parseNullableDouble(json['exchange_rate_usd_to_bob']),
+      referenceNumber: json['reference_number']?.toString(),
+      proofImageUrl: json['proof_image_url']?.toString(),
       paidAt: json['paid_at'] != null ? DateTime.parse(json['paid_at']) : null,
       createdAt: DateTime.parse(json['created_at']),
     );

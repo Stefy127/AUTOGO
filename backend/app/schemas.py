@@ -272,9 +272,15 @@ class IncidentAccept(BaseModel):
 
 class OfferCreate(BaseModel):
     incident_id: int
-    amount: float = Field(..., gt=0)
     technician_id: Optional[int] = None
     estimated_arrival_time: Optional[int] = Field(default=None, ge=1)
+    diagnosis_cost: Optional[float] = Field(default=None, ge=0)
+    labor_cost: Optional[float] = Field(default=None, ge=0)
+    parts_cost: Optional[float] = Field(default=None, ge=0)
+    transport_cost: Optional[float] = Field(default=None, ge=0)
+    additional_cost: Optional[float] = Field(default=None, ge=0)
+    repair_time_minutes: Optional[int] = Field(default=None, ge=1)
+    price_explanation: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -289,6 +295,13 @@ class OfferResponse(BaseModel):
     technician_id: Optional[int] = None
     amount: float
     estimated_arrival_time: Optional[int] = None
+    repair_time_minutes: Optional[int] = None
+    diagnosis_cost: Optional[float] = None
+    labor_cost: Optional[float] = None
+    parts_cost: Optional[float] = None
+    transport_cost: Optional[float] = None
+    additional_cost: Optional[float] = None
+    price_explanation: Optional[str] = None
     notes: Optional[str] = None
     status: OfferStatus
     created_at: datetime
@@ -440,6 +453,66 @@ class PaymentUpdate(BaseModel):
 
 class PaymentQRConfirm(BaseModel):
     reference_number: Optional[str] = None
+    proof_image_url: Optional[str] = None
+
+
+class IncidentCancelRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class IncidentCancelResponse(BaseModel):
+    incident_id: int
+    status: IncidentStatus
+    requires_payment: bool
+    message: str
+    payment_id: Optional[int] = None
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    cancellation_percentage: Optional[int] = None
+    original_offer_amount_usd: Optional[float] = None
+    penalty_amount_usd: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    penalty_amount_bob: Optional[float] = None
+    payment_method: Optional[PaymentMethod] = None
+    qr_image_url: Optional[str] = None
+
+
+class QRPaymentConfirmRequest(BaseModel):
+    reference_number: str = Field(..., min_length=1)
+    proof_image_url: Optional[str] = None
+
+
+class QRPaymentConfirmResponse(BaseModel):
+    payment_id: int
+    payment_status: str
+    message: str
+
+
+class QRPaymentVerifyRequest(BaseModel):
+    approved: bool
+    notes: Optional[str] = None
+
+
+class QRPaymentVerifyResponse(BaseModel):
+    payment_id: int
+    payment_status: str
+    is_paid: bool
+    message: str
+
+
+class CancellationPaymentPendingResponse(BaseModel):
+    payment_id: int
+    incident_id: int
+    client_name: Optional[str] = None
+    payment_type: str
+    payment_status: str
+    amount_usd: float
+    amount_bob: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    reference_number: Optional[str] = None
+    proof_image_url: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
 
 
 class TechnicianAccessRequest(BaseModel):
@@ -464,6 +537,7 @@ class TechnicianIncidentStatusUpdate(BaseModel):
         "completed",
         "cancelled",
     ]
+    reason: Optional[str] = None
 
 
 class TechnicianPaymentConfirm(BaseModel):
@@ -479,6 +553,14 @@ class PaymentResponse(PaymentBase):
     workshop_earnings: float
     is_paid: bool
     paid_at: Optional[datetime] = None
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    original_amount_usd: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    amount_bob: Optional[float] = None
+    proof_image_url: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    verified_by_user_id: Optional[int] = None
     stripe_session_id: Optional[str] = None
     stripe_payment_intent_id: Optional[str] = None
     stripe_payment_status: Optional[str] = None
@@ -509,6 +591,12 @@ class PaymentStatusResponse(BaseModel):
     is_paid: bool
     paid_at: Optional[datetime] = None
     payment_method: PaymentMethod
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    original_amount_usd: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    amount_bob: Optional[float] = None
+    proof_image_url: Optional[str] = None
     stripe_session_id: Optional[str] = None
     stripe_payment_intent_id: Optional[str] = None
     stripe_payment_status: Optional[str] = None

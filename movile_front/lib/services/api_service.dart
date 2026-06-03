@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart' as http_parser;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -11,13 +12,33 @@ class ApiService {
   static String get baseUrl {
     const fromDefine = String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'https://autogo-backend-g4ctv55smq-uc.a.run.app',
-  );
-  try {
+      defaultValue: '',
+    );
+
+    try {
       final envValue = dotenv.env['API_BASE_URL'];
-      if (envValue != null && envValue.isNotEmpty) return envValue;
+      final configuredValue = fromDefine.isNotEmpty ? fromDefine : envValue;
+      if (configuredValue != null && configuredValue.isNotEmpty) {
+        return _normalizeForPlatform(configuredValue);
+      }
     } catch (_) {}
-    return fromDefine;
+
+    if (kIsWeb) {
+      return 'http://localhost:8000';
+    }
+
+    return 'http://10.0.2.2:8000';
+  }
+
+  static String _normalizeForPlatform(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null) return value;
+
+    if (kIsWeb && uri.host == '10.0.2.2') {
+      return uri.replace(host: 'localhost').toString();
+    }
+
+    return value;
   }
 
   static const _timeout = Duration(seconds: 15);

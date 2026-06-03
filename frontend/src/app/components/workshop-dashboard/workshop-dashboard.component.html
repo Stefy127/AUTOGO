@@ -70,6 +70,14 @@
         <span *ngIf="sidebarOpen">Notificaciones</span>
         <span class="badge-count" *ngIf="unreadNotificationsCount > 0">{{ unreadNotificationsCount }}</span>
       </button>
+      <button
+        class="nav-item"
+        [class.active]="currentView === 'cancellation-payments'"
+        (click)="navigateTo('cancellation-payments')">
+        <span class="icon">$</span>
+        <span *ngIf="sidebarOpen">Pagos Cancelacion</span>
+        <span class="badge-count" *ngIf="cancellationPayments.length > 0">{{ cancellationPayments.length }}</span>
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -94,6 +102,7 @@
       <h1 *ngIf="currentView === 'incidents-history'">Historial de Emergencias</h1>
       <h1 *ngIf="currentView === 'reports'">Reporte de Emergencias</h1>
       <h1 *ngIf="currentView === 'notifications'">Notificaciones del Taller</h1>
+      <h1 *ngIf="currentView === 'cancellation-payments'">Pagos por Cancelacion</h1>
     </header>
 
     <!-- Error Message -->
@@ -250,6 +259,13 @@
                     (click)="completeIncident(incident)"
                     title="Marcar como completada">
                     ✅ Completar
+                  </button>
+                  <button
+                    *ngIf="incident.status === 'assigned' || incident.status === 'accepted' || incident.status === 'on_route' || incident.status === 'in_service'"
+                    class="btn-action btn-danger"
+                    (click)="cancelAssignedService(incident)"
+                    title="Cancelar servicio">
+                    Cancelar
                   </button>
                   <span *ngIf="incident.status === 'completed' || incident.status === 'cancelled'" class="text-muted">
                     -
@@ -685,6 +701,84 @@
         </div>
       </div>
     </div>
+
+    <!-- VIEW: Cancellation Payments -->
+    <div class="view-container" *ngIf="!loading && currentView === 'cancellation-payments'">
+      <div class="section-card">
+        <div class="notifications-header">
+          <h3>Pagos por cancelacion pendientes</h3>
+          <button class="btn-secondary" (click)="loadCancellationPayments()" [disabled]="loadingCancellationPayments">
+            {{ loadingCancellationPayments ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+        </div>
+
+        <div class="history-table" *ngIf="cancellationPayments.length > 0">
+          <table>
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Incidente</th>
+                <th>Tipo</th>
+                <th>USD</th>
+                <th>Bs</th>
+                <th>TC</th>
+                <th>Referencia</th>
+                <th>Comprobante</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let payment of cancellationPayments">
+                <td>{{ payment.client_name || '-' }}</td>
+                <td>#{{ payment.incident_id }}</td>
+                <td>{{ payment.payment_type }}</td>
+                <td>{{ payment.amount_usd | number:'1.2-2' }}</td>
+                <td>{{ payment.amount_bob || 0 | number:'1.2-2' }}</td>
+                <td>{{ payment.exchange_rate_usd_to_bob || 0 | number:'1.2-2' }}</td>
+                <td>{{ payment.reference_number || '-' }}</td>
+                <td>
+                  <ng-container *ngIf="payment.proof_image_url; else noProof">
+                    <a *ngIf="!payment.proof_image_url?.startsWith('data:image')" [href]="payment.proof_image_url" target="_blank">Ver</a>
+                    <img
+                      *ngIf="payment.proof_image_url?.startsWith('data:image')"
+                      [src]="payment.proof_image_url"
+                      alt="Comprobante"
+                      style="max-height: 64px; max-width: 96px; border-radius: 8px; object-fit: cover;"
+                    />
+                  </ng-container>
+                  <ng-template #noProof>-</ng-template>
+                </td>
+                <td>{{ payment.payment_status }}</td>
+                <td>
+                  <button
+                    class="btn-mini btn-toggle"
+                    [disabled]="payment.payment_status !== 'pending_verification'"
+                    (click)="verifyCancellationPayment(payment, true)">
+                    Confirmar
+                  </button>
+                  <button
+                    class="btn-mini btn-delete"
+                    [disabled]="payment.payment_status !== 'pending_verification'"
+                    (click)="verifyCancellationPayment(payment, false)">
+                    Rechazar
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="empty-state" *ngIf="cancellationPayments.length === 0">
+          <h3>Sin pagos pendientes</h3>
+          <p>No hay pagos por cancelacion pendientes de revision.</p>
+        </div>
+
+        <p class="section-hint" *ngIf="cancellationPayments.length > 0">
+          El botón de confirmación se habilita cuando el cliente envía el comprobante y el pago queda en estado pending_verification.
+        </p>
+      </div>
+    </div>
   </main>
 
   <!-- MODAL: Accept Incident -->
@@ -733,24 +827,59 @@
             <small class="hint">Solo mecánicos disponibles pueden ser asignados</small>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label>Diagnostico</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.diagnosis_cost" name="diagnosis_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Mano de obra</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.labor_cost" name="labor_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Repuestos</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.parts_cost" name="parts_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Traslado</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.transport_cost" name="transport_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Adicionales</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.additional_cost" name="additional_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Tiempo reparacion (min)</label>
+              <input type="number" step="1" min="1" class="form-control"
+                [(ngModel)]="acceptForm.repair_time_minutes" name="repair_time_minutes" placeholder="Ej: 90">
+            </div>
+          </div>
+
           <div class="form-group">
-            <label>💰 Tarifa Estimada del Servicio *</label>
-            <input 
-              type="number" 
-              step="0.01"
-              min="0"
-              class="form-control"
-              [(ngModel)]="acceptForm.amount"
-              name="amount"
-              required
-              placeholder="Ej: 500.00">
-            <small class="hint">
-              <strong>Ganancia mecánico ({{ (workshop?.commission_rate || 0.10) * 100 }}%):</strong> 
-              ${{ ((acceptForm.amount || 0) * (workshop?.commission_rate || 0.10)).toFixed(2) }}
-              &nbsp;|&nbsp;
-              <strong>Comisión taller ({{ (1 - (workshop?.commission_rate || 0.10)) * 100 }}%):</strong> 
-              ${{ ((acceptForm.amount || 0) * (1 - (workshop?.commission_rate || 0.10))).toFixed(2) }}
-            </small>
+            <label>Explicacion tecnica del precio</label>
+            <textarea class="form-control" rows="3" [(ngModel)]="acceptForm.price_explanation"
+              name="price_explanation" placeholder="Describe diagnostico, repuestos y alcance del trabajo"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Notas</label>
+            <textarea class="form-control" rows="2" [(ngModel)]="acceptForm.notes"
+              name="notes" placeholder="Observaciones para el cliente"></textarea>
+          </div>
+
+          <div class="quote-total">
+            <span>Total cotizado</span>
+            <strong>${{ getQuoteTotal().toFixed(2) }}</strong>
           </div>
         </form>
       </div>
@@ -763,10 +892,11 @@
           type="button" 
           class="btn-success" 
           (click)="confirmAcceptIncident()"
-          [disabled]="!acceptForm.technician_id || !acceptForm.amount || (acceptForm.amount || 0) <= 0">
+          [disabled]="!acceptForm.technician_id || getQuoteTotal() <= 0">
           ✅ Confirmar y Enviar
         </button>
       </div>
     </div>
   </div>
 </div>
+

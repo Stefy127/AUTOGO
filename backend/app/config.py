@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = "http://localhost:4200/#/payment-success"
     STRIPE_CANCEL_URL: str = "http://localhost:4200/#/payment-cancel"
     STRIPE_CURRENCY: str = "usd"
+    USD_TO_BOB_RATE: float = 6.96
 
     class Config:
         env_file = ".env"

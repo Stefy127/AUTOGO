@@ -83,14 +83,17 @@ class TechnicianAccessService with ChangeNotifier {
         .toList();
   }
 
-  Future<Incident> updateIncidentStatus(int incidentId, String status) async {
+  Future<Incident> updateIncidentStatus(int incidentId, String status, {String? reason}) async {
     if (_accessToken == null) {
       throw Exception('Sesión de técnico no iniciada');
     }
 
     final response = await _apiService.patch(
       '/technician/incidents/$incidentId/status',
-      {'status': status},
+      {
+        'status': status,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
       token: _accessToken,
     );
 
