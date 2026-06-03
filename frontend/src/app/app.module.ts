@@ -18,6 +18,9 @@ import { AdminClientManagementComponent } from './components/admin-client-manage
 import { AdminRentalManagementComponent } from './components/admin-rental-management/admin-rental-management.component';
 import { AdminBitacoraComponent } from './components/admin-bitacora/admin-bitacora.component';
 import { OperationalReportsComponent } from './components/operational-reports/operational-reports.component';
+import { AdminWorkshopDetailComponent } from './components/admin-workshop-detail/admin-workshop-detail.component';
+import { PaymentSuccessComponent } from './components/payment-success/payment-success.component';
+import { PaymentCancelComponent } from './components/payment-cancel/payment-cancel.component';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 import { AuditInterceptor } from './interceptors/audit.interceptor';
 
@@ -35,7 +38,10 @@ import { AuditInterceptor } from './interceptors/audit.interceptor';
     AdminClientManagementComponent,
     AdminRentalManagementComponent,
     AdminBitacoraComponent,
-    OperationalReportsComponent
+    OperationalReportsComponent,
+    AdminWorkshopDetailComponent,
+    PaymentSuccessComponent,
+    PaymentCancelComponent
   ],
   imports: [
     BrowserModule,

@@ -90,6 +90,43 @@ class AdminUserUpdate(BaseModel):
     role: Optional[UserRole] = None
 
 
+class AdminWorkshopUserCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    phone: Optional[str] = None
+    role: UserRole
+
+
+class AdminUserStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class AdminTechnicianStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class AdminTechnicianUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_available: Optional[bool] = None
+
+
+class AdminWorkshopUserResponse(BaseModel):
+    user_id: Optional[int] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[UserRole] = None
+    relation: str
+    workshop_id: int
+    technician_id: Optional[int] = None
+    is_active: bool = True
+    is_available: Optional[bool] = None
+    access_code: Optional[str] = None
+
+
 # Vehicle Schemas
 class VehicleBase(BaseModel):
     brand: str
@@ -597,6 +634,114 @@ class NotificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# CU29 Tenant admin schemas (tenant = Workshop)
+class TenantWorkshopResponse(BaseModel):
+    id: int
+    name: str
+    address: str
+    latitude: float
+    longitude: float
+    commission_percentage: float
+    is_active: bool
+    owner_id: int
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    owner_phone: Optional[str] = None
+    technician_count: int = 0
+    active_technician_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class TenantWorkshopCreate(BaseModel):
+    owner_id: int
+    name: str = Field(..., min_length=1)
+    address: str = Field(..., min_length=1)
+    latitude: float
+    longitude: float
+    commission_percentage: float = Field(default=10.0, ge=0, le=100)
+    is_active: bool = True
+
+
+class TenantWorkshopOwnerCreate(BaseModel):
+    full_name: str = Field(..., min_length=1)
+    email: EmailStr
+    phone: Optional[str] = None
+    password: str = Field(..., min_length=6)
+
+
+class TenantWorkshopDataCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    address: str = Field(..., min_length=1)
+    latitude: float
+    longitude: float
+    commission_percentage: float = Field(default=10.0, ge=0, le=100)
+    is_active: bool = True
+
+
+class TenantWorkshopWithOwnerCreate(BaseModel):
+    owner: TenantWorkshopOwnerCreate
+    workshop: TenantWorkshopDataCreate
+
+
+class TenantWorkshopUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1)
+    address: Optional[str] = Field(default=None, min_length=1)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    commission_percentage: Optional[float] = Field(default=None, ge=0, le=100)
+    is_active: Optional[bool] = None
+
+
+class TenantWorkshopStatusUpdate(BaseModel):
+    is_active: bool
+
+
+class TenantWorkshopOwnerOption(BaseModel):
+    id: int
+    full_name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    role: UserRole
+    has_workshop: bool
+    workshop_id: Optional[int] = None
+
+
+class TenantWorkshopUserRow(BaseModel):
+    row_type: str
+    relation: str
+    user_id: Optional[int] = None
+    technician_id: Optional[int] = None
+    workshop_id: int
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    role: UserRole
+    is_active: bool
+    is_available: Optional[bool] = None
+    access_code: Optional[str] = None
+
+
+class TenantTechnicianCreate(BaseModel):
+    full_name: str = Field(..., min_length=1)
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+    phone: Optional[str] = None
+    is_active: bool = True
+    is_available: bool = True
+
+
+class TenantTechnicianUpdate(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=1)
+    phone: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_available: Optional[bool] = None
+
+
+class TenantTechnicianStatusUpdate(BaseModel):
+    is_active: bool
 
 
 # Resolve forward refs declared in IncidentResponse

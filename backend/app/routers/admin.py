@@ -11,9 +11,12 @@ from app.models import (
 )
 from app.schemas import (
     WorkshopResponse, IncidentResponse, PaymentResponse, IncidentHistoryResponse,
-    AdminUserUpdate
+    AdminUserUpdate, AdminWorkshopUserResponse, AdminWorkshopUserCreate, AdminUserStatusUpdate,
+    AdminTechnicianUpdate, AdminTechnicianStatusUpdate, TechnicianResponse,
+    WorkshopCreate, WorkshopUpdate
 )
 from app.auth import get_current_user
+from app.auth import get_password_hash
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -53,6 +56,302 @@ async def get_all_workshops(
     workshops = query.offset(skip).limit(limit).all()
     
     return workshops
+
+
+@router.get("/workshops/{workshop_id}", response_model=WorkshopResponse)
+async def get_workshop_by_id(
+    workshop_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    workshop = db.query(Workshop).filter(Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Taller no encontrado"
+        )
+    return workshop
+
+
+@router.post("/workshops", response_model=WorkshopResponse, status_code=status.HTTP_201_CREATED)
+async def create_workshop(
+    payload: WorkshopCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+
+    owner = db.query(User).filter(User.id == payload.owner_id).first()
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Owner no encontrado"
+        )
+    if owner.role != UserRole.WORKSHOP:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El owner debe tener rol workshop"
+        )
+
+    existing = db.query(Workshop).filter(Workshop.owner_id == payload.owner_id).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este usuario workshop ya tiene un taller asociado"
+        )
+
+    workshop = Workshop(
+        owner_id=payload.owner_id,
+        name=payload.name,
+        address=payload.address,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        commission_percentage=payload.commission_percentage,
+        is_active=payload.is_active
+    )
+    db.add(workshop)
+    db.commit()
+    db.refresh(workshop)
+    return workshop
+
+
+@router.put("/workshops/{workshop_id}", response_model=WorkshopResponse)
+async def update_workshop_by_admin(
+    workshop_id: int,
+    payload: WorkshopUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    workshop = db.query(Workshop).filter(Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Taller no encontrado"
+        )
+
+    data = payload.dict(exclude_unset=True)
+    for field in ["name", "address", "latitude", "longitude", "commission_percentage", "is_active"]:
+        if field in data:
+            setattr(workshop, field, data[field])
+
+    db.commit()
+    db.refresh(workshop)
+    return workshop
+
+
+@router.get("/workshops/{workshop_id}/users", response_model=List[AdminWorkshopUserResponse])
+async def get_workshop_users(
+    workshop_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    workshop = db.query(Workshop).filter(Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Taller no encontrado"
+        )
+
+    result: List[AdminWorkshopUserResponse] = []
+
+    owner = db.query(User).filter(User.id == workshop.owner_id).first()
+    if owner:
+        result.append(
+            AdminWorkshopUserResponse(
+                user_id=owner.id,
+                full_name=owner.full_name,
+                email=owner.email,
+                phone=owner.phone,
+                role=owner.role,
+                relation="owner",
+                workshop_id=workshop.id,
+                is_active=workshop.is_active
+            )
+        )
+
+    technicians = db.query(Technician).filter(Technician.workshop_id == workshop.id).all()
+    for tech in technicians:
+        tech_user = db.query(User).filter(User.id == tech.user_id).first() if tech.user_id else None
+        result.append(
+            AdminWorkshopUserResponse(
+                user_id=tech_user.id if tech_user else None,
+                full_name=tech_user.full_name if tech_user else tech.name,
+                email=tech_user.email if tech_user else None,
+                phone=tech_user.phone if tech_user else tech.phone,
+                role=tech_user.role if tech_user else UserRole.TECHNICIAN,
+                relation="technician",
+                workshop_id=workshop.id,
+                technician_id=tech.id,
+                is_active=tech.is_active,
+                is_available=tech.is_available,
+                access_code=tech.access_code
+            )
+        )
+
+    return result
+
+
+@router.post("/workshops/{workshop_id}/users", response_model=AdminWorkshopUserResponse, status_code=status.HTTP_201_CREATED)
+async def create_workshop_user(
+    workshop_id: int,
+    payload: AdminWorkshopUserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    workshop = db.query(Workshop).filter(Workshop.id == workshop_id).first()
+    if not workshop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Taller no encontrado"
+        )
+
+    if payload.role not in [UserRole.WORKSHOP, UserRole.TECHNICIAN]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Solo se permite crear usuarios workshop o technician en este módulo"
+        )
+
+    exists = db.query(User).filter(User.email == payload.email).first()
+    if exists:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El correo ya está en uso"
+        )
+
+    if payload.role == UserRole.WORKSHOP:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se permite crear otro owner workshop desde este detalle. Edita el owner actual."
+        )
+
+    user = User(
+        email=payload.email,
+        hashed_password=get_password_hash(payload.password),
+        full_name=payload.full_name,
+        phone=payload.phone,
+        role=payload.role
+    )
+    db.add(user)
+    db.flush()
+
+    technician = Technician(
+        workshop_id=workshop.id,
+        user_id=user.id,
+        name=payload.full_name,
+        phone=payload.phone,
+        is_active=True,
+        is_available=True
+    )
+    db.add(technician)
+    db.commit()
+    db.refresh(user)
+    db.refresh(technician)
+
+    return AdminWorkshopUserResponse(
+        user_id=user.id,
+        full_name=user.full_name,
+        email=user.email,
+        phone=user.phone,
+        role=user.role,
+        relation="technician",
+        workshop_id=workshop.id,
+        technician_id=technician.id,
+        is_active=technician.is_active
+    )
+
+
+@router.patch("/users/{user_id}/status")
+async def update_user_status(
+    user_id: int,
+    payload: AdminUserStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado"
+        )
+
+    if user.role == UserRole.WORKSHOP:
+        workshop = db.query(Workshop).filter(Workshop.owner_id == user.id).first()
+        if not workshop:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workshop del usuario no encontrado")
+        workshop.is_active = payload.is_active
+    elif user.role == UserRole.TECHNICIAN:
+        technician = db.query(Technician).filter(Technician.user_id == user.id).first()
+        if not technician:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Registro técnico del usuario no encontrado")
+        technician.is_active = payload.is_active
+        if not payload.is_active:
+            technician.is_available = False
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este módulo solo permite activar/desactivar usuarios workshop/technician"
+        )
+
+    db.commit()
+    return {"message": "Estado actualizado correctamente", "user_id": user_id, "is_active": payload.is_active}
+
+
+@router.put("/technicians/{technician_id}", response_model=TechnicianResponse)
+async def admin_update_technician(
+    technician_id: int,
+    payload: AdminTechnicianUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    technician = db.query(Technician).filter(Technician.id == technician_id).first()
+    if not technician:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Técnico no encontrado"
+        )
+
+    data = payload.dict(exclude_unset=True)
+    allowed_fields = {"name", "phone", "is_active", "is_available"}
+    for field, value in data.items():
+        if field in allowed_fields:
+            setattr(technician, field, value)
+
+    if data.get("is_active") is False:
+        technician.is_available = False
+
+    db.commit()
+    db.refresh(technician)
+    return technician
+
+
+@router.patch("/technicians/{technician_id}/status", response_model=TechnicianResponse)
+async def admin_update_technician_status(
+    technician_id: int,
+    payload: AdminTechnicianStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_admin(current_user)
+    technician = db.query(Technician).filter(Technician.id == technician_id).first()
+    if not technician:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Técnico no encontrado"
+        )
+
+    technician.is_active = payload.is_active
+    if not payload.is_active:
+        technician.is_available = False
+
+    db.commit()
+    db.refresh(technician)
+    return technician
 
 
 @router.patch("/workshops/{workshop_id}/activate")

@@ -10,15 +10,21 @@ import { AdminClientManagementComponent } from './components/admin-client-manage
 import { AdminRentalManagementComponent } from './components/admin-rental-management/admin-rental-management.component';
 import { AdminBitacoraComponent } from './components/admin-bitacora/admin-bitacora.component';
 import { AuthGuard } from './guards/auth.guard';
+import { AdminWorkshopDetailComponent } from './components/admin-workshop-detail/admin-workshop-detail.component';
+import { PaymentSuccessComponent } from './components/payment-success/payment-success.component';
+import { PaymentCancelComponent } from './components/payment-cancel/payment-cancel.component';
 
 const routes: Routes = [
   { path: '', redirectTo: '/login', pathMatch: 'full' },
+  { path: 'payment-success', component: PaymentSuccessComponent },
+  { path: 'payment-cancel', component: PaymentCancelComponent },
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterComponent },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },
   { path: 'workshop', component: WorkshopDashboardComponent, canActivate: [AuthGuard] },
   { path: 'reports/operational', component: OperationalReportsComponent, canActivate: [AuthGuard] },
   { path: 'admin/gestion-talleres', component: AdminWorkshopManagementComponent, canActivate: [AuthGuard] },
+  { path: 'admin/gestion-talleres/:id', component: AdminWorkshopDetailComponent, canActivate: [AuthGuard] },
   { path: 'admin/gestion-clientes', component: AdminClientManagementComponent, canActivate: [AuthGuard] },
   { path: 'admin/alquiler-autos', component: AdminRentalManagementComponent, canActivate: [AuthGuard] },
   { path: 'admin/bitacora', component: AdminBitacoraComponent, canActivate: [AuthGuard] },
