@@ -108,8 +108,8 @@ class AssignmentService:
         workshop_scores.sort(key=lambda x: x["score"])
         best_match = workshop_scores[0]
         
-        # Store estimated arrival time
-        incident.estimated_arrival_time = best_match["duration_min"]
+        # Store estimated arrival time (normalize to seconds)
+        incident.estimated_arrival_time = int(best_match.get("duration_min", 0)) * 60
         
         return best_match["workshop"]
     

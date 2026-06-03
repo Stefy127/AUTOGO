@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/auth_service.dart';
-import '../services/api_service.dart';
 import '../models/models.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import 'emergency_offers_screen.dart';
+import 'incident_tracking_screen_stub.dart'
+  if (dart.library.io) 'incident_tracking_screen.dart';
 
 class EmergencyListScreen extends StatefulWidget {
   const EmergencyListScreen({super.key});
@@ -23,6 +28,15 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
   void initState() {
     super.initState();
     _loadIncidents();
+    _etaRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _etaRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadIncidents() async {
@@ -60,6 +74,9 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
         return Colors.lightBlue;
       case 'accepted':
         return Colors.blue;
+      case 'on_route':
+        return Colors.teal;
+      case 'in_service':
       case 'in_progress':
         return Colors.indigo;
       case 'completed':
@@ -81,6 +98,10 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
         return 'Asignada';
       case 'accepted':
         return 'Aceptada';
+      case 'on_route':
+        return 'En camino';
+      case 'in_service':
+        return 'En atención';
       case 'in_progress':
         return 'En Proceso';
       case 'completed':
@@ -184,7 +205,8 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.inbox_outlined, size: 80, color: Colors.grey),
+                      const Icon(Icons.inbox_outlined,
+                          size: 80, color: Colors.grey),
                       const SizedBox(height: 16),
                       const Text(
                         'No tienes emergencias registradas',
@@ -220,9 +242,7 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(12),
-                          onTap: () {
-                            _showIncidentDetails(incident);
-                          },
+                          onTap: () => _showIncidentDetailsLive(incident),
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
@@ -239,7 +259,8 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: _getStatusColor(incident.status).withOpacity(0.2),
+                                        color: _getStatusColor(incident.status)
+                                          .withAlpha(51),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
@@ -257,7 +278,8 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: _getPriorityColor(incident.priority).withOpacity(0.2),
+                                        color: _getPriorityColor(incident.priority)
+                                          .withAlpha(51),
                                         borderRadius: BorderRadius.circular(20),
                                       ),
                                       child: Text(
@@ -271,7 +293,8 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                     ),
                                     Text(
                                       incident.createdAt != null
-                                          ? DateFormat('dd/MM/yy HH:mm').format(incident.createdAt!)
+                                          ? DateFormat('dd/MM/yy HH:mm')
+                                              .format(incident.createdAt!)
                                           : '',
                                       style: const TextStyle(
                                         color: Colors.grey,
@@ -290,19 +313,23 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                if (incident.aiSummary != null && incident.aiSummary!.isNotEmpty) ...[
+                                if (incident.aiSummary != null &&
+                                    incident.aiSummary!.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
                                       color: Colors.blue.shade50,
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.blue.shade200),
+                                      border: Border.all(
+                                          color: Colors.blue.shade200),
                                     ),
                                     child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        const Text('🤖', style: TextStyle(fontSize: 16)),
+                                        const Text('🤖',
+                                            style: TextStyle(fontSize: 16)),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
@@ -322,13 +349,15 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                 const SizedBox(height: 8),
                                 Row(
                                   children: [
-                                    const Icon(Icons.directions_car, size: 16, color: Colors.grey),
+                                    const Icon(Icons.directions_car,
+                                        size: 16, color: Colors.grey),
                                     const SizedBox(width: 4),
                                     Text(
                                       incident.vehicle != null
                                           ? '${incident.vehicle!.brand} ${incident.vehicle!.model}'
                                           : 'Vehículo',
-                                      style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                      style: const TextStyle(
+                                          color: Colors.grey, fontSize: 14),
                                     ),
                                   ],
                                 ),
@@ -336,28 +365,34 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
-                                      const Icon(Icons.build, size: 16, color: Colors.grey),
+                                      const Icon(Icons.build,
+                                          size: 16, color: Colors.grey),
                                       const SizedBox(width: 4),
                                       Text(
                                         incident.workshop!.name,
-                                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                        style: const TextStyle(
+                                            color: Colors.grey, fontSize: 14),
                                       ),
                                     ],
                                   ),
                                 ],
-                                if (incident.locationText != null && incident.locationText!.isNotEmpty)
+                                if (incident.locationText != null &&
+                                    incident.locationText!.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                                        const Icon(Icons.location_on,
+                                            size: 16, color: Colors.grey),
                                         const SizedBox(width: 4),
                                         Expanded(
                                           child: Text(
                                             incident.locationText!,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                            style: const TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 14),
                                           ),
                                         ),
                                       ],
@@ -399,7 +434,8 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.pushNamed(context, '/emergency-form').then((_) => _loadIncidents());
+          Navigator.pushNamed(context, '/emergency-form')
+              .then((_) => _loadIncidents());
         },
         backgroundColor: Colors.red,
         child: const Icon(Icons.add),

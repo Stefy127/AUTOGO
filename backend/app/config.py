@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # CICLO 2 - AI Features
     AI_ENABLED: bool = False
     GEMINI_API_KEY: Optional[str] = None
+
+    # CICLO 2 - Google Maps Routes API
+    GOOGLE_MAPS_API_KEY: Optional[str] = None
     
     # CICLO 2 - Workshop Assignment
     MAX_WORKSHOP_DISTANCE_KM: float = 50.0

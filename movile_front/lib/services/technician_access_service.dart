@@ -97,6 +97,24 @@ class TechnicianAccessService with ChangeNotifier {
     return Incident.fromJson(response as Map<String, dynamic>);
   }
 
+  Future<Map<String, dynamic>> updateLocation(
+      {required double latitude, required double longitude}) async {
+    if (_accessToken == null) {
+      throw Exception('Sesión de técnico no iniciada');
+    }
+
+    final response = await _apiService.patch(
+      '/technician/location',
+      {
+        'latitude': latitude,
+        'longitude': longitude,
+      },
+      token: _accessToken,
+    );
+
+    return response as Map<String, dynamic>;
+  }
+
   Future<String> getIncidentPaymentQrUrl(int incidentId) async {
     if (_accessToken == null) {
       throw Exception('Sesión de técnico no iniciada');
@@ -110,7 +128,8 @@ class TechnicianAccessService with ChangeNotifier {
     return (response as Map<String, dynamic>)['qr_image_url']?.toString() ?? '';
   }
 
-  Future<Payment> confirmPayment({required int incidentId, required String paymentMethod}) async {
+  Future<Payment> confirmPayment(
+      {required int incidentId, required String paymentMethod}) async {
     if (_accessToken == null) {
       throw Exception('Sesión de técnico no iniciada');
     }

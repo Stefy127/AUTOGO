@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from app.database import engine, Base
 from app.config import settings
 from app.routers import auth, users, vehicles, incidents, workshops, payments, admin, admin_tenant, rental_vehicles, audit_logs, technicians, offers, technician_portal, ai_analysis, notifications, reports
@@ -16,6 +17,7 @@ def _run_startup_migrations() -> None:
         Path(__file__).parent / "migrations" / "2026_04_27_notifications_and_paymentmethod.sql",
         Path(__file__).parent / "migrations" / "2026_05_28_stripe_payments.sql",
         Path(__file__).parent / "migrations" / "2026_05_29_cu22_offline_sync.sql",
+        Path(__file__).parent / "migrations" / "2026_05_28_cu21_real_time_technician_tracking.sql",
     ]
 
     for migration_file in migration_files:
@@ -62,10 +64,19 @@ if not cors_origins:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_private_network_access_header(request: Request, call_next):
+    response: Response = await call_next(request)
+    if request.headers.get("access-control-request-private-network", "").lower() == "true":
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 
 # Include routers
 app.include_router(auth.router)

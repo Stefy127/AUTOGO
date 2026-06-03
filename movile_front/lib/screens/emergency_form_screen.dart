@@ -93,9 +93,11 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
         return;
       }
       final dir = await getTemporaryDirectory();
-      final filePath = '${dir.path}/emergency_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final filePath =
+          '${dir.path}/emergency_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000),
+        const RecordConfig(
+            encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 16000),
         path: filePath,
       );
       setState(() => _isRecording = true);
@@ -129,7 +131,8 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
   // ── Image capture ─────────────────────────────────────────────────────────
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, imageQuality: 70, maxWidth: 1280);
+    final picked = await picker.pickImage(
+        source: source, imageQuality: 70, maxWidth: 1280);
     if (picked == null) return;
     setState(() => _imageFile = File(picked.path));
   }
@@ -139,7 +142,9 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
     setState(() => _processingImage = true);
     final auth = context.read<AuthService>();
     final api = context.read<ApiService>();
-    final mime = _imageFile!.path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    final mime = _imageFile!.path.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : 'image/jpeg';
     try {
       final result = await api.postMultipart(
         '/ai/analyze-image',
@@ -165,11 +170,13 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
-      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
         _showError('Permiso de ubicación denegado');
         return;
       }
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _latitude = pos.latitude;
         _longitude = pos.longitude;
@@ -194,7 +201,9 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
 
     // Build combined description
     final parts = <String>[];
-    if (_descController.text.trim().isNotEmpty) parts.add(_descController.text.trim());
+    if (_descController.text.trim().isNotEmpty) {
+      parts.add(_descController.text.trim());
+    }
     if (_audioDescription.isNotEmpty && !parts.contains(_audioDescription)) {
       parts.add(_audioDescription);
     }
@@ -210,14 +219,21 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
     }
 
     try {
+      if (!_locationSelected) {
+        _showError(
+            'Debes seleccionar tu ubicación antes de enviar la emergencia');
+        setState(() => _step = _Step.review);
+        return;
+      }
       await api.post(
         '/incidents',
         {
           'description': finalDesc.isEmpty ? 'Emergencia vehicular' : finalDesc,
           'vehicle_id': _selectedVehicle!.id,
           'location_text': _locationController.text.trim(),
-          'latitude': _latitude ?? 0.0,
-          'longitude': _longitude ?? 0.0,
+          'location_selected': _locationSelected,
+          'latitude': _latitude,
+          'longitude': _longitude,
           'image_url': imageDataUrl,
           'priority': _priority,
           'ai_summary': _imageDescription.isEmpty ? null : _imageDescription,
@@ -251,7 +267,9 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
 
   void _goToReview() {
     // Merge descriptions into the text controller if it's empty
-    final parts = [_audioDescription, _imageDescription].where((s) => s.isNotEmpty).toList();
+    final parts = [_audioDescription, _imageDescription]
+        .where((s) => s.isNotEmpty)
+        .toList();
     if (_descController.text.trim().isEmpty && parts.isNotEmpty) {
       _descController.text = parts.join('\n\n');
     }
@@ -271,7 +289,8 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
           if (_step == _Step.audio || _step == _Step.image)
             TextButton(
               onPressed: _goToReview,
-              child: const Text('Saltar', style: TextStyle(color: Colors.white)),
+              child:
+                  const Text('Saltar', style: TextStyle(color: Colors.white)),
             ),
         ],
       ),
@@ -400,7 +419,12 @@ class _AudioStep extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: isRecording ? Colors.red.shade700 : Colors.red,
                   boxShadow: isRecording
-                      ? [BoxShadow(color: Colors.red.shade300, blurRadius: 20, spreadRadius: 6)]
+                      ? [
+                          BoxShadow(
+                              color: Colors.red.shade300,
+                              blurRadius: 20,
+                              spreadRadius: 6)
+                        ]
                       : [],
                 ),
                 child: Icon(
@@ -414,7 +438,11 @@ class _AudioStep extends StatelessWidget {
           const SizedBox(height: 16),
           Center(
             child: Text(
-              isRecording ? 'Grabando… toca para detener' : audioPath != null ? 'Grabación lista' : 'Toca para grabar',
+              isRecording
+                  ? 'Grabando… toca para detener'
+                  : audioPath != null
+                      ? 'Grabación lista'
+                      : 'Toca para grabar',
               style: TextStyle(
                 color: isRecording ? Colors.red : Colors.grey.shade600,
                 fontWeight: isRecording ? FontWeight.bold : FontWeight.normal,
@@ -426,9 +454,14 @@ class _AudioStep extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: isProcessing ? null : onAnalyze,
               icon: isProcessing
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.auto_awesome),
-              label: Text(isProcessing ? 'Analizando con IA…' : 'Analizar con IA'),
+              label:
+                  Text(isProcessing ? 'Analizando con IA…' : 'Analizar con IA'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.indigo,
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -451,7 +484,10 @@ class _AudioStep extends StatelessWidget {
                     children: [
                       Icon(Icons.auto_awesome, size: 18, color: Colors.indigo),
                       SizedBox(width: 6),
-                      Text('Transcripción IA', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                      Text('Transcripción IA',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -472,7 +508,9 @@ class _AudioStep extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: (audioPath != null || description.isNotEmpty) ? onNext : null,
+                  onPressed: (audioPath != null || description.isNotEmpty)
+                      ? onNext
+                      : null,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                   child: const Text('Siguiente'),
                 ),
@@ -546,7 +584,8 @@ class _ImageStep extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.camera_alt_outlined, size: 48, color: Colors.grey),
+                    Icon(Icons.camera_alt_outlined,
+                        size: 48, color: Colors.grey),
                     SizedBox(height: 8),
                     Text('Sin foto', style: TextStyle(color: Colors.grey)),
                   ],
@@ -578,9 +617,14 @@ class _ImageStep extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: isProcessing ? null : onAnalyze,
               icon: isProcessing
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.auto_awesome),
-              label: Text(isProcessing ? 'Analizando imagen…' : 'Analizar con IA'),
+              label:
+                  Text(isProcessing ? 'Analizando imagen…' : 'Analizar con IA'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.indigo,
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -603,7 +647,10 @@ class _ImageStep extends StatelessWidget {
                     children: [
                       Icon(Icons.auto_awesome, size: 18, color: Colors.indigo),
                       SizedBox(width: 6),
-                      Text('Análisis IA', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
+                      Text('Análisis IA',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -676,8 +723,11 @@ class _ReviewStep extends StatelessWidget {
     required this.onSubmit,
   });
 
-  Color _priorityColor(String p) =>
-      p == 'high' ? Colors.red : p == 'low' ? Colors.green : Colors.orange;
+  Color _priorityColor(String p) => p == 'high'
+      ? Colors.red
+      : p == 'low'
+          ? Colors.green
+          : Colors.orange;
 
   @override
   Widget build(BuildContext context) {
@@ -711,16 +761,22 @@ class _ReviewStep extends StatelessWidget {
                     children: [
                       Icon(Icons.auto_awesome, size: 16, color: Colors.indigo),
                       SizedBox(width: 6),
-                      Text('Análisis IA', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo, fontSize: 13)),
+                      Text('Análisis IA',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo,
+                              fontSize: 13)),
                     ],
                   ),
                   if (audioDescription.isNotEmpty) ...[
                     const SizedBox(height: 6),
-                    Text('🎤 $audioDescription', style: const TextStyle(fontSize: 12)),
+                    Text('🎤 $audioDescription',
+                        style: const TextStyle(fontSize: 12)),
                   ],
                   if (imageDescription.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text('📷 $imageDescription', style: const TextStyle(fontSize: 12)),
+                    Text('📷 $imageDescription',
+                        style: const TextStyle(fontSize: 12)),
                   ],
                 ],
               ),
@@ -729,7 +785,8 @@ class _ReviewStep extends StatelessWidget {
           ],
 
           // Editable description
-          const Text('Descripción', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text('Descripción',
+              style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           TextField(
             controller: descController,
@@ -741,12 +798,14 @@ class _ReviewStep extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Priority
-          const Text('Prioridad detectada', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text('Prioridad detectada',
+              style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: priority,
+            initialValue: priority,
             decoration: InputDecoration(
-              prefixIcon: Icon(Icons.priority_high, color: _priorityColor(priority)),
+              prefixIcon:
+                  Icon(Icons.priority_high, color: _priorityColor(priority)),
             ),
             items: const [
               DropdownMenuItem(value: 'low', child: Text('🟢 Baja')),
@@ -763,7 +822,7 @@ class _ReviewStep extends StatelessWidget {
           loadingVehicles
               ? const Center(child: CircularProgressIndicator())
               : DropdownButtonFormField<Vehicle>(
-                  value: selectedVehicle,
+                  initialValue: selectedVehicle,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     hintText: 'Selecciona tu vehículo',
@@ -772,7 +831,8 @@ class _ReviewStep extends StatelessWidget {
                   items: vehicles.map((v) {
                     return DropdownMenuItem(
                       value: v,
-                      child: Text('${v.brand} ${v.model} - ${v.plate}', overflow: TextOverflow.ellipsis),
+                      child: Text('${v.brand} ${v.model} - ${v.plate}',
+                          overflow: TextOverflow.ellipsis),
                     );
                   }).toList(),
                   onChanged: onVehicleChanged,
@@ -780,7 +840,8 @@ class _ReviewStep extends StatelessWidget {
           const SizedBox(height: 20),
 
           // Location
-          const Text('Ubicación', style: TextStyle(fontWeight: FontWeight.w600)),
+          const Text('Ubicación',
+              style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           TextField(
             controller: locationController,
@@ -824,7 +885,8 @@ class _ReviewStep extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             icon: const Icon(Icons.emergency),
-            label: const Text('Solicitar Ayuda', style: TextStyle(fontSize: 16)),
+            label:
+                const Text('Solicitar Ayuda', style: TextStyle(fontSize: 16)),
           ),
         ],
       ),
@@ -859,5 +921,3 @@ class _WizardProgress extends StatelessWidget {
     );
   }
 }
-
-

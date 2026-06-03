@@ -110,7 +110,8 @@ class MapboxService:
                     f"{self.directions_url}/{coordinates}",
                     params={
                         "access_token": self.api_key,
-                        "geometries": "geojson",
+                        # request encoded polyline (precision 5) so mobile decoder can use it
+                        "geometries": "polyline",
                         "overview": "full"
                     }
                 )
@@ -123,7 +124,8 @@ class MapboxService:
                         "distance": route["distance"],  # meters
                         "duration": route["duration"],  # seconds
                         "duration_minutes": int(route["duration"] / 60),
-                        "geometry": route["geometry"]  # GeoJSON for route visualization
+                        # when geometries=polyline Mapbox returns an encoded polyline string in 'geometry'
+                        "polyline": route.get("geometry")
                     }
                 return None
                 

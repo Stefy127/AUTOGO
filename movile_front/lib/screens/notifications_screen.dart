@@ -15,8 +15,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<MobileNotificationService>().refresh();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await context.read<MobileNotificationService>().refresh();
+      } catch (e, st) {
+        debugPrint('Notifications refresh error: $e\n$st');
+      }
     });
   }
 
