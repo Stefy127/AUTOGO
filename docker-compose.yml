@@ -42,6 +42,7 @@ services:
       STRIPE_SUCCESS_URL: ${STRIPE_SUCCESS_URL:-http://localhost:4200/#/payment-success}
       STRIPE_CANCEL_URL: ${STRIPE_CANCEL_URL:-http://localhost:4200/#/payment-cancel}
       STRIPE_CURRENCY: ${STRIPE_CURRENCY:-usd}
+      USD_TO_BOB_RATE: ${USD_TO_BOB_RATE:-6.96}
     depends_on:
       postgres:
         condition: service_healthy

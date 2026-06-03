@@ -335,10 +335,18 @@ class Payment(Base):
     # Payment tracking
     paid_at = Column(DateTime, nullable=True)
     is_paid = Column(Boolean, default=False, nullable=False)
+    payment_type = Column(String, default="service", nullable=False)
+    payment_status = Column(String, default="pending", nullable=False)
     
     # Optional payment reference
     reference_number = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    original_amount_usd = Column(Numeric(10, 2), nullable=True)
+    exchange_rate_usd_to_bob = Column(Numeric(10, 2), nullable=True)
+    amount_bob = Column(Numeric(10, 2), nullable=True)
+    proof_image_url = Column(String, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    verified_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # CU25 - Stripe traceability fields (fase 1 preparación)
     stripe_session_id = Column(String, nullable=True)

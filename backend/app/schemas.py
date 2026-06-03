@@ -453,6 +453,66 @@ class PaymentUpdate(BaseModel):
 
 class PaymentQRConfirm(BaseModel):
     reference_number: Optional[str] = None
+    proof_image_url: Optional[str] = None
+
+
+class IncidentCancelRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class IncidentCancelResponse(BaseModel):
+    incident_id: int
+    status: IncidentStatus
+    requires_payment: bool
+    message: str
+    payment_id: Optional[int] = None
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    cancellation_percentage: Optional[int] = None
+    original_offer_amount_usd: Optional[float] = None
+    penalty_amount_usd: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    penalty_amount_bob: Optional[float] = None
+    payment_method: Optional[PaymentMethod] = None
+    qr_image_url: Optional[str] = None
+
+
+class QRPaymentConfirmRequest(BaseModel):
+    reference_number: str = Field(..., min_length=1)
+    proof_image_url: Optional[str] = None
+
+
+class QRPaymentConfirmResponse(BaseModel):
+    payment_id: int
+    payment_status: str
+    message: str
+
+
+class QRPaymentVerifyRequest(BaseModel):
+    approved: bool
+    notes: Optional[str] = None
+
+
+class QRPaymentVerifyResponse(BaseModel):
+    payment_id: int
+    payment_status: str
+    is_paid: bool
+    message: str
+
+
+class CancellationPaymentPendingResponse(BaseModel):
+    payment_id: int
+    incident_id: int
+    client_name: Optional[str] = None
+    payment_type: str
+    payment_status: str
+    amount_usd: float
+    amount_bob: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    reference_number: Optional[str] = None
+    proof_image_url: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
 
 
 class TechnicianAccessRequest(BaseModel):
@@ -477,6 +537,7 @@ class TechnicianIncidentStatusUpdate(BaseModel):
         "completed",
         "cancelled",
     ]
+    reason: Optional[str] = None
 
 
 class TechnicianPaymentConfirm(BaseModel):
@@ -492,6 +553,14 @@ class PaymentResponse(PaymentBase):
     workshop_earnings: float
     is_paid: bool
     paid_at: Optional[datetime] = None
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    original_amount_usd: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    amount_bob: Optional[float] = None
+    proof_image_url: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    verified_by_user_id: Optional[int] = None
     stripe_session_id: Optional[str] = None
     stripe_payment_intent_id: Optional[str] = None
     stripe_payment_status: Optional[str] = None
@@ -522,6 +591,12 @@ class PaymentStatusResponse(BaseModel):
     is_paid: bool
     paid_at: Optional[datetime] = None
     payment_method: PaymentMethod
+    payment_type: Optional[str] = None
+    payment_status: Optional[str] = None
+    original_amount_usd: Optional[float] = None
+    exchange_rate_usd_to_bob: Optional[float] = None
+    amount_bob: Optional[float] = None
+    proof_image_url: Optional[str] = None
     stripe_session_id: Optional[str] = None
     stripe_payment_intent_id: Optional[str] = None
     stripe_payment_status: Optional[str] = None

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { AuthService } from './auth.service';
-import { Payment } from '../models/models';
+import { CancellationPaymentPending, Payment } from '../models/models';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -77,5 +77,30 @@ export class PaymentService {
       paid_at: new Date().toISOString(),
       reference_number: reference
     });
+  }
+
+  getPendingCancellationPayments(): Observable<CancellationPaymentPending[]> {
+    return this.http.get<CancellationPaymentPending[]>(
+      `${this.apiUrl}/cancellations/pending`,
+      { headers: this.getHeaders() }
+    );
+  }
+
+  verifyCancellationQrPayment(id: number, approved: boolean, notes?: string): Observable<{
+    payment_id: number;
+    payment_status: string;
+    is_paid: boolean;
+    message: string;
+  }> {
+    return this.http.post<{
+      payment_id: number;
+      payment_status: string;
+      is_paid: boolean;
+      message: string;
+    }>(
+      `${this.apiUrl}/${id}/verify-qr-payment`,
+      { approved, notes },
+      { headers: this.getHeaders() }
+    );
   }
 }

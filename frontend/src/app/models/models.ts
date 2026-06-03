@@ -180,7 +180,7 @@ export interface Incident {
   workshop_id?: number;
   technician_id?: number;
   description: string;
-  status: 'pending' | 'waiting_offers' | 'assigned' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'pending' | 'waiting_offers' | 'assigned' | 'accepted' | 'on_route' | 'in_service' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high';
   payment_method?: 'cash' | 'transfer' | 'qr';
   latitude?: number;
@@ -245,10 +245,33 @@ export interface Payment {
   workshop_earnings: number;
   is_paid: boolean;
   paid_at?: string;
+  payment_type?: string;
+  payment_status?: string;
+  original_amount_usd?: number;
+  exchange_rate_usd_to_bob?: number;
+  amount_bob?: number;
+  proof_image_url?: string;
+  verified_at?: string;
+  verified_by_user_id?: number;
   reference_number?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface CancellationPaymentPending {
+  payment_id: number;
+  incident_id: number;
+  client_name?: string;
+  payment_type: string;
+  payment_status: string;
+  amount_usd: number;
+  amount_bob?: number;
+  exchange_rate_usd_to_bob?: number;
+  reference_number?: string;
+  proof_image_url?: string;
+  notes?: string;
+  created_at: string;
 }
 
 export interface WorkshopPaymentQr {

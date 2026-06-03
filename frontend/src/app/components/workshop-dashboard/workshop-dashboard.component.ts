@@ -3,7 +3,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { WorkshopService } from '../../services/workshop.service';
 import { IncidentService } from '../../services/incident.service';
-import { Workshop, Technician, Incident, WorkshopStats, AppNotification } from '../../models/models';
+import { PaymentService } from '../../services/payment.service';
+import { Workshop, Technician, Incident, WorkshopStats, AppNotification, CancellationPaymentPending } from '../../models/models';
 import { LocationData } from '../map-picker/map-picker.component';
 
 @Component({
@@ -50,6 +51,8 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   notifications: AppNotification[] = [];
   unreadNotificationsCount = 0;
   loadingNotifications = false;
+  cancellationPayments: CancellationPaymentPending[] = [];
+  loadingCancellationPayments = false;
   private notificationPollTimer: number | null = null;
 
   // Accept incident modal state
@@ -68,7 +71,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   };
 
   // Navigation state
-  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications' = 'dashboard';
+  currentView: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications' | 'cancellation-payments' = 'dashboard';
 
   reportFilters = {
     startDate: '',
@@ -81,6 +84,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private workshopService: WorkshopService,
     private incidentService: IncidentService,
+    private paymentService: PaymentService,
     private route: ActivatedRoute,
     private router: Router
   ) {}
@@ -98,6 +102,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
         'incidents-history',
         'reports',
         'notifications',
+        'cancellation-payments',
       ];
       if (requested && allowedViews.includes(requested as typeof this.currentView)) {
         this.navigateTo(requested as typeof this.currentView);
@@ -135,6 +140,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
         this.loadAvailableIncidents();
         this.loadMyIncidents();
         this.loadPaymentQr();
+        this.loadCancellationPayments(true);
         this.loading = false;
       },
       error: (error) => {
@@ -282,13 +288,16 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  navigateTo(view: 'dashboard' | 'edit-info' | 'add-technician' | 'incidents-available' | 'incidents-history' | 'reports' | 'notifications'): void {
+  navigateTo(view: typeof this.currentView): void {
     this.currentView = view;
     if (view === 'incidents-history') {
       this.loadIncidentHistory();
     }
     if (view === 'notifications') {
       this.loadNotifications();
+    }
+    if (view === 'cancellation-payments') {
+      this.loadCancellationPayments();
     }
   }
 
@@ -690,6 +699,43 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
       }
     });
   }
+
+  loadCancellationPayments(silent = false): void {
+    if (!silent) {
+      this.loadingCancellationPayments = true;
+    }
+
+    this.paymentService.getPendingCancellationPayments().subscribe({
+      next: (payments) => {
+        this.cancellationPayments = payments;
+        this.loadingCancellationPayments = false;
+      },
+      error: (error) => {
+        console.error('Error loading cancellation payments:', error);
+        this.loadingCancellationPayments = false;
+      }
+    });
+  }
+
+  verifyCancellationPayment(payment: CancellationPaymentPending, approved: boolean): void {
+    const notes = approved ? 'Pago verificado correctamente' : prompt('Motivo del rechazo') || undefined;
+    if (!approved && !notes) {
+      return;
+    }
+
+    this.paymentService.verifyCancellationQrPayment(payment.payment_id, approved, notes).subscribe({
+      next: (response) => {
+        this.successMessage = response.message;
+        this.error = '';
+        this.loadCancellationPayments(true);
+        this.loadNotifications(true);
+        setTimeout(() => this.successMessage = '', 3000);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo actualizar el pago por cancelacion';
+      }
+    });
+  }
   cancelAcceptIncident(): void {
     this.showAcceptModal = false;
     this.selectedIncident = null;
@@ -715,6 +761,26 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.error = 'Error al rechazar la emergencia';
+      }
+    });
+  }
+
+  cancelAssignedService(incident: Incident): void {
+    if (!incident.id) return;
+
+    const reason = prompt('Motivo opcional de cancelacion') || undefined;
+    this.incidentService.cancelIncident(incident.id, reason).subscribe({
+      next: (response) => {
+        this.successMessage = response.message || 'Servicio cancelado. La emergencia volvera a espera de cotizaciones.';
+        this.error = '';
+        this.loadMyIncidents();
+        this.loadAvailableIncidents();
+        this.loadTechnicians();
+        this.loadNotifications(true);
+        setTimeout(() => this.successMessage = '', 4000);
+      },
+      error: (error) => {
+        this.error = error.error?.detail || 'No se pudo cancelar el servicio';
       }
     });
   }

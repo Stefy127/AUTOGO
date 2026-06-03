@@ -213,15 +213,49 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final service =
         Provider.of<TechnicianAccessService>(context, listen: false);
+    String? reason;
+
+    if (newStatus == 'cancelled') {
+      final controller = TextEditingController();
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Cancelar servicio'),
+          content: TextField(
+            controller: controller,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Motivo opcional',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Volver'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Cancelar servicio'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) return;
+      reason = controller.text;
+    }
 
     try {
-      await service.updateIncidentStatus(incident.id!, newStatus);
+      await service.updateIncidentStatus(incident.id!, newStatus, reason: reason);
       if (!mounted) return;
       await _loadIncidents();
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
-            content: Text('Estado actualizado a $newStatus'),
+            content: Text(newStatus == 'cancelled'
+                ? 'Servicio cancelado. La emergencia volvera a espera de cotizaciones.'
+                : 'Estado actualizado a $newStatus'),
             backgroundColor: Colors.green),
       );
     } catch (e) {
@@ -533,7 +567,9 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: OutlinedButton.icon(
-                                    onPressed: active.status == 'in_service' ||
+                                    onPressed: active.status == 'assigned' ||
+                                            active.status == 'accepted' ||
+                                            active.status == 'in_service' ||
                                             active.status == 'on_route'
                                         ? () =>
                                             _updateStatus(active, 'cancelled')

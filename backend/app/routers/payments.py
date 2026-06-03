@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,12 +8,19 @@ import json
 import stripe
 
 from app.database import get_db
-from app.models import User, Payment, Incident, Workshop, UserRole, IncidentStatus, PaymentMethod, WorkshopPaymentQR
+from app.models import User, Payment, Incident, Workshop, UserRole, IncidentStatus, PaymentMethod, WorkshopPaymentQR, Technician, IncidentHistory
+from app.services.notification_service import create_notification
+from app.services.websocket_manager import websocket_manager
 from app.schemas import (
+    CancellationPaymentPendingResponse,
     PaymentCreate,
     PaymentResponse,
     PaymentUpdate,
     PaymentQRConfirm,
+    QRPaymentConfirmRequest,
+    QRPaymentConfirmResponse,
+    QRPaymentVerifyRequest,
+    QRPaymentVerifyResponse,
     StripeCheckoutResponse,
     StripeWebhookResponse,
     PaymentStatusResponse,
@@ -22,6 +29,7 @@ from app.auth import get_current_user
 from app.config import settings
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+CANCELLATION_PAYMENT_TYPES = ("cancellation_on_route", "cancellation_in_service")
 
 
 def calculate_commission(amount: float, commission_percentage: float):
@@ -82,6 +90,20 @@ def _assert_payment_visibility(payment: Payment, incident: Incident, current_use
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permisos para ver este pago"
             )
+
+
+async def _broadcast_payment_update(payment: Payment) -> None:
+    await websocket_manager.broadcast_to_incident(
+        payment.incident_id,
+        {
+            "type": "payment_update",
+            "incident_id": payment.incident_id,
+            "payment_id": payment.id,
+            "payment_type": payment.payment_type,
+            "payment_status": payment.payment_status,
+            "is_paid": payment.is_paid,
+        },
+    )
 
 
 @router.post("", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
@@ -387,6 +409,7 @@ async def stripe_webhook(
 
         if (payment_status or "").lower() == "paid":
             payment.is_paid = True
+            payment.payment_status = "paid"
             payment.paid_at = datetime.utcnow()
             payment.payment_method = PaymentMethod.TRANSFER
             payment.reference_number = str(payment_intent) if payment_intent else payment.reference_number
@@ -412,6 +435,212 @@ async def stripe_webhook(
     return StripeWebhookResponse(received=True)
 
 
+@router.get("/cancellations/pending", response_model=List[CancellationPaymentPendingResponse])
+async def get_pending_cancellation_payments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in [UserRole.WORKSHOP, UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo talleres o administradores pueden ver pagos de cancelación pendientes"
+        )
+
+    query = db.query(Payment).options(
+        joinedload(Payment.incident).joinedload(Incident.user)
+    ).filter(
+        Payment.payment_type.in_(CANCELLATION_PAYMENT_TYPES),
+        Payment.payment_status.in_(["pending", "pending_verification", "rejected"]),
+    )
+
+    if current_user.role == UserRole.WORKSHOP:
+        workshop = db.query(Workshop).filter(Workshop.owner_id == current_user.id).first()
+        if not workshop:
+            return []
+        query = query.join(Incident, Payment.incident_id == Incident.id).filter(
+            Incident.workshop_id == workshop.id
+        )
+
+    payments = query.order_by(Payment.created_at.desc()).all()
+    return [
+        CancellationPaymentPendingResponse(
+            payment_id=payment.id,
+            incident_id=payment.incident_id,
+            client_name=payment.incident.user.full_name if payment.incident and payment.incident.user else None,
+            payment_type=payment.payment_type or "service",
+            payment_status=payment.payment_status or ("paid" if payment.is_paid else "pending"),
+            amount_usd=float(payment.amount),
+            amount_bob=float(payment.amount_bob) if payment.amount_bob is not None else None,
+            exchange_rate_usd_to_bob=float(payment.exchange_rate_usd_to_bob) if payment.exchange_rate_usd_to_bob is not None else None,
+            reference_number=payment.reference_number,
+            proof_image_url=payment.proof_image_url,
+            notes=payment.notes,
+            created_at=payment.created_at,
+        )
+        for payment in payments
+    ]
+
+
+@router.post("/{payment_id}/confirm-qr-payment", response_model=QRPaymentConfirmResponse)
+async def confirm_cancellation_qr_payment(
+    payment_id: int,
+    payload: QRPaymentConfirmRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role != UserRole.CLIENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo clientes pueden confirmar pagos QR por cancelación"
+        )
+
+    payment, incident = _get_payment_with_incident_or_404(db, payment_id)
+    if incident.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para confirmar este pago"
+        )
+
+    if payment.payment_type not in CANCELLATION_PAYMENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este endpoint solo aplica para pagos de cancelación"
+        )
+
+    if payment.payment_status not in ["pending", "rejected"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El pago no está pendiente de confirmación por el cliente"
+        )
+
+    payment.payment_status = "pending_verification"
+    payment.reference_number = payload.reference_number.strip()
+    payment.proof_image_url = payload.proof_image_url
+    payment.is_paid = False
+    payment.updated_at = datetime.utcnow()
+
+    if incident.workshop:
+        create_notification(
+            db,
+            user_id=incident.workshop.owner_id,
+            incident_id=incident.id,
+            title="Pago por cancelación pendiente",
+            message="El cliente confirmó un pago por cancelación pendiente de verificación.",
+            notification_type="cancellation_payment_pending_verification",
+        )
+
+    db.commit()
+    db.refresh(payment)
+    await _broadcast_payment_update(payment)
+
+    return QRPaymentConfirmResponse(
+        payment_id=payment.id,
+        payment_status=payment.payment_status,
+        message="Pago enviado para verificación del taller.",
+    )
+
+
+@router.post("/{payment_id}/verify-qr-payment", response_model=QRPaymentVerifyResponse)
+async def verify_cancellation_qr_payment(
+    payment_id: int,
+    payload: QRPaymentVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in [UserRole.WORKSHOP, UserRole.ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo talleres o administradores pueden verificar pagos QR"
+        )
+
+    payment, incident = _get_payment_with_incident_or_404(db, payment_id)
+
+    if current_user.role == UserRole.WORKSHOP:
+        workshop = db.query(Workshop).filter(Workshop.owner_id == current_user.id).first()
+        if not workshop or incident.workshop_id != workshop.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para verificar este pago"
+            )
+
+    if payment.payment_type not in CANCELLATION_PAYMENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Este endpoint solo aplica para pagos de cancelación"
+        )
+
+    if payment.payment_status != "pending_verification":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El pago debe estar pendiente de verificación"
+        )
+
+    payment.notes = payload.notes or payment.notes
+    if payload.approved:
+        payment.payment_status = "paid"
+        payment.is_paid = True
+        payment.paid_at = datetime.utcnow()
+        payment.verified_at = datetime.utcnow()
+        payment.verified_by_user_id = current_user.id
+        message = "Pago por cancelación verificado correctamente."
+        notification_message = "Tu pago por cancelación fue verificado correctamente."
+        # Marcar el incidente como cancelado y liberar al técnico asignado
+        if incident:
+            incident.status = IncidentStatus.CANCELLED
+            if incident.technician_id:
+                tech = db.query(Technician).filter(Technician.id == incident.technician_id).first()
+                if tech:
+                    tech.is_available = True
+            db.add(IncidentHistory(
+                incident_id=incident.id,
+                status=incident.status,
+                changed_by_user_id=current_user.id,
+                notes=f"Cancelación confirmada por taller. Pago id={payment.id}",
+            ))
+            # Broadcast status update to websocket subscribers
+            await websocket_manager.broadcast_to_incident(
+                incident.id,
+                {
+                    "type": "status_update",
+                    "incident_id": incident.id,
+                    "status": incident.status.value,
+                    "message": "Incidente cancelado tras verificación de pago por el taller.",
+                    "requires_payment": False,
+                    "payment_id": payment.id,
+                    "payment_status": payment.payment_status,
+                },
+            )
+    else:
+        payment.payment_status = "rejected"
+        payment.is_paid = False
+        payment.verified_at = datetime.utcnow()
+        payment.verified_by_user_id = current_user.id
+        message = "Pago por cancelación rechazado."
+        notification_message = "Tu pago por cancelación fue rechazado. Revisa la referencia o comprobante."
+
+    payment.updated_at = datetime.utcnow()
+
+    create_notification(
+        db,
+        user_id=incident.user_id,
+        incident_id=incident.id,
+        title="Pago por cancelación actualizado",
+        message=notification_message,
+        notification_type="cancellation_payment_verified" if payload.approved else "cancellation_payment_rejected",
+    )
+
+    db.commit()
+    db.refresh(payment)
+    await _broadcast_payment_update(payment)
+
+    return QRPaymentVerifyResponse(
+        payment_id=payment.id,
+        payment_status=payment.payment_status,
+        is_paid=payment.is_paid,
+        message=message,
+    )
+
+
 @router.get("/{payment_id}/status", response_model=PaymentStatusResponse)
 async def get_payment_status(
     payment_id: int,
@@ -428,6 +657,12 @@ async def get_payment_status(
         is_paid=payment.is_paid,
         paid_at=payment.paid_at,
         payment_method=payment.payment_method,
+        payment_type=payment.payment_type,
+        payment_status=payment.payment_status,
+        original_amount_usd=float(payment.original_amount_usd) if payment.original_amount_usd is not None else None,
+        exchange_rate_usd_to_bob=float(payment.exchange_rate_usd_to_bob) if payment.exchange_rate_usd_to_bob is not None else None,
+        amount_bob=float(payment.amount_bob) if payment.amount_bob is not None else None,
+        proof_image_url=payment.proof_image_url,
         stripe_session_id=payment.stripe_session_id,
         stripe_payment_intent_id=payment.stripe_payment_intent_id,
         stripe_payment_status=payment.stripe_payment_status,
@@ -520,6 +755,7 @@ async def update_payment(
     # Si se marca como pagado, agregar la fecha
     if update_data.get("is_paid") and not payment.is_paid:
         update_data["paid_at"] = datetime.utcnow()
+        update_data["payment_status"] = "paid"
     
     for field, value in update_data.items():
         setattr(payment, field, value)
@@ -581,6 +817,7 @@ async def pay_incident_with_qr(
     payment.payment_method = PaymentMethod.QR
     payment.reference_number = payment_data.reference_number or f"AG-QR-{incident_id}-{int(datetime.utcnow().timestamp())}"
     payment.is_paid = True
+    payment.payment_status = "paid"
     payment.paid_at = datetime.utcnow()
     payment.notes = "Pago QR confirmado por cliente"
 

@@ -4,6 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from jose import JWTError, jwt
 from app.database import get_db
 from app import models, schemas
@@ -23,6 +24,37 @@ incident_socket_security = HTTPBearer(auto_error=False)
 ai_service = AIService()
 mapbox_service = MapboxService()
 logger = logging.getLogger(__name__)
+
+
+def _decimal_money(value) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _calculate_payment_split(amount: Decimal, commission_percentage: float) -> tuple[Decimal, Decimal]:
+    commission = (amount * Decimal(str(commission_percentage or 10.0)) / Decimal("100")).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
+    )
+    return commission, (amount - commission).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _accepted_offer(db: Session, incident_id: int) -> models.Offer | None:
+    return db.query(models.Offer).filter(
+        models.Offer.incident_id == incident_id,
+        models.Offer.status == models.OfferStatus.ACCEPTED,
+    ).order_by(models.Offer.updated_at.desc(), models.Offer.id.desc()).first()
+
+
+async def _broadcast_incident_status(incident: models.Incident, message: str, extra: dict | None = None) -> None:
+    payload = {
+        "type": "status_update",
+        "incident_id": incident.id,
+        "status": incident.status.value,
+        "message": message,
+    }
+    if extra:
+        payload.update(extra)
+    await websocket_manager.broadcast_to_incident(incident.id, payload)
 
 # Debug-only lightweight endpoint to validate incident payloads without DB/auth
 if os.getenv("DEBUG_INCIDENTS", "false").lower() == "true":
@@ -496,6 +528,322 @@ def get_incident(
         )
     
     return incident
+
+
+@router.post("/{incident_id}/cancel", response_model=schemas.IncidentCancelResponse)
+async def cancel_incident(
+    incident_id: int,
+    payload: schemas.IncidentCancelRequest,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    incident = db.query(models.Incident).options(
+        joinedload(models.Incident.workshop),
+        joinedload(models.Incident.technician),
+    ).filter(models.Incident.id == incident_id).first()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Incident not found"
+        )
+
+    if incident.status in [models.IncidentStatus.COMPLETED, models.IncidentStatus.CANCELLED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede cancelar un incidente completado o ya cancelado"
+        )
+
+    reason = (payload.reason or "").strip()
+
+    if current_user.role == models.UserRole.CLIENT:
+        if incident.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to cancel this incident"
+            )
+
+        no_charge_statuses = [
+            models.IncidentStatus.PENDING,
+            models.IncidentStatus.WAITING_OFFERS,
+            models.IncidentStatus.ASSIGNED,
+            models.IncidentStatus.ACCEPTED,
+        ]
+
+        if incident.status in no_charge_statuses:
+            if incident.technician_id:
+                technician = db.query(models.Technician).filter(
+                    models.Technician.id == incident.technician_id
+                ).first()
+                if technician:
+                    technician.is_available = True
+
+            db.query(models.Offer).filter(
+                models.Offer.incident_id == incident.id,
+                models.Offer.status.in_([models.OfferStatus.PENDING, models.OfferStatus.ACCEPTED]),
+            ).update({models.Offer.status: models.OfferStatus.REJECTED}, synchronize_session=False)
+
+            existing_payment = db.query(models.Payment).filter(
+                models.Payment.incident_id == incident.id
+            ).first()
+            if existing_payment:
+                existing_payment.payment_status = "rejected"
+                existing_payment.is_paid = False
+                existing_payment.notes = "Servicio cancelado por el cliente sin cobro"
+
+            incident.status = models.IncidentStatus.CANCELLED
+            db.add(models.IncidentHistory(
+                incident_id=incident.id,
+                status=incident.status,
+                changed_by_user_id=current_user.id,
+                notes=reason or "Servicio cancelado por el cliente sin cobro"
+            ))
+
+            if incident.workshop:
+                create_notification(
+                    db,
+                    user_id=incident.workshop.owner_id,
+                    incident_id=incident.id,
+                    title="Servicio cancelado por el cliente",
+                    message=f"El cliente canceló la emergencia #{incident.id} sin cobro.",
+                    notification_type="service_cancelled_by_client",
+                )
+
+            db.commit()
+            await _broadcast_incident_status(incident, "Servicio cancelado correctamente sin cobro.")
+            return schemas.IncidentCancelResponse(
+                incident_id=incident.id,
+                status=incident.status,
+                requires_payment=False,
+                message="Servicio cancelado correctamente sin cobro.",
+            )
+
+        if incident.status not in [
+            models.IncidentStatus.ON_ROUTE,
+            models.IncidentStatus.IN_SERVICE,
+            models.IncidentStatus.IN_PROGRESS,
+        ]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El estado actual no permite cancelación del cliente"
+            )
+
+        if incident.status in [models.IncidentStatus.IN_SERVICE, models.IncidentStatus.IN_PROGRESS] and not reason:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El motivo de cancelación es obligatorio cuando la atención ya inició"
+            )
+
+        offer = _accepted_offer(db, incident.id)
+        if not offer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró una oferta aceptada para calcular la penalidad"
+            )
+
+        workshop = db.query(models.Workshop).filter(models.Workshop.id == offer.workshop_id).first()
+        if not workshop:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No se encontró el taller asociado a la oferta aceptada"
+            )
+
+        payment_qr = db.query(models.WorkshopPaymentQR).filter(
+            models.WorkshopPaymentQR.workshop_id == workshop.id
+        ).first()
+        if not payment_qr and incident.workshop_id:
+            payment_qr = db.query(models.WorkshopPaymentQR).filter(
+                models.WorkshopPaymentQR.workshop_id == incident.workshop_id
+            ).first()
+
+        percentage = 20 if incident.status == models.IncidentStatus.ON_ROUTE else 50
+        payment_type = "cancellation_on_route" if percentage == 20 else "cancellation_in_service"
+        notes = (
+            "Pago por cancelación: técnico en camino. Penalidad del 20%."
+            if percentage == 20
+            else "Cancelación especial: atención iniciada. Cobro parcial del 50%."
+        )
+        offer_amount = _decimal_money(offer.amount)
+        penalty_usd = (offer_amount * Decimal(percentage) / Decimal("100")).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        )
+        exchange_rate = _decimal_money(settings.USD_TO_BOB_RATE)
+        penalty_bob = (penalty_usd * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        commission_amount, workshop_earnings = _calculate_payment_split(
+            penalty_usd,
+            workshop.commission_percentage,
+        )
+
+        payment = db.query(models.Payment).filter(models.Payment.incident_id == incident.id).first()
+        if not payment:
+            payment = models.Payment(incident_id=incident.id)
+            db.add(payment)
+
+        payment.amount = penalty_usd
+        payment.payment_method = models.PaymentMethod.QR
+        payment.commission_percentage = workshop.commission_percentage or 10.0
+        payment.commission_amount = commission_amount
+        payment.workshop_earnings = workshop_earnings
+        payment.payment_type = payment_type
+        payment.payment_status = "pending"
+        payment.original_amount_usd = penalty_usd
+        payment.exchange_rate_usd_to_bob = exchange_rate
+        payment.amount_bob = penalty_bob
+        payment.is_paid = False
+        payment.paid_at = None
+        payment.reference_number = None
+        payment.proof_image_url = None
+        payment.verified_at = None
+        payment.verified_by_user_id = None
+        payment.notes = f"{notes} Motivo: {reason}" if reason else notes
+        payment.currency = "usd"
+        payment.stripe_session_id = None
+        payment.stripe_payment_intent_id = None
+        payment.stripe_payment_status = None
+
+        # Do NOT change incident status here. The cancellation only takes effect
+        # after the workshop verifies the payment. Keep the payment record in
+        # pending state and notify the workshop for verification.
+        if incident.technician_id:
+            technician = db.query(models.Technician).filter(
+                models.Technician.id == incident.technician_id
+            ).first()
+            if technician:
+                # keep technician assigned until workshop verifies cancellation
+                pass
+
+        create_notification(
+            db,
+            user_id=workshop.owner_id,
+            incident_id=incident.id,
+            title="Cancelación con pago pendiente",
+            message=f"El cliente solicitó cancelar la emergencia #{incident.id}. Debe pagar {float(penalty_bob):.2f} Bs por cancelación.",
+            notification_type="cancellation_payment_pending",
+        )
+
+        db.commit()
+        db.refresh(payment)
+        await _broadcast_incident_status(
+            incident,
+            "Pago por cancelación pendiente de verificación.",
+            {
+                "requires_payment": True,
+                "payment_id": payment.id,
+                "payment_status": payment.payment_status,
+                "payment_type": payment.payment_type,
+            },
+        )
+
+        return schemas.IncidentCancelResponse(
+            incident_id=incident.id,
+            status=incident.status,
+            requires_payment=True,
+            payment_id=payment.id,
+            payment_type=payment.payment_type,
+            payment_status=payment.payment_status,
+            cancellation_percentage=percentage,
+            original_offer_amount_usd=float(offer_amount),
+            penalty_amount_usd=float(penalty_usd),
+            exchange_rate_usd_to_bob=float(exchange_rate),
+            penalty_amount_bob=float(penalty_bob),
+            payment_method=payment.payment_method,
+            qr_image_url=payment_qr.qr_image_url if payment_qr else None,
+            message=f"Debe pagar {float(penalty_bob):.2f} Bs equivalente al {percentage}% de la cotización aceptada.",
+        )
+
+    if current_user.role in [models.UserRole.TECHNICIAN, models.UserRole.WORKSHOP]:
+        if incident.status not in [
+            models.IncidentStatus.ASSIGNED,
+            models.IncidentStatus.ACCEPTED,
+            models.IncidentStatus.ON_ROUTE,
+            models.IncidentStatus.IN_SERVICE,
+        ]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El estado actual no permite cancelar por técnico o taller"
+            )
+
+        if current_user.role == models.UserRole.WORKSHOP:
+            workshop = db.query(models.Workshop).filter(
+                models.Workshop.owner_id == current_user.id
+            ).first()
+            if not workshop or incident.workshop_id != workshop.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to cancel this incident"
+                )
+        else:
+            technician = db.query(models.Technician).filter(
+                models.Technician.user_id == current_user.id
+            ).first()
+            if not technician or incident.technician_id != technician.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to cancel this incident"
+                )
+
+        if incident.technician_id:
+            assigned_technician = db.query(models.Technician).filter(
+                models.Technician.id == incident.technician_id
+            ).first()
+            if assigned_technician:
+                assigned_technician.is_available = True
+
+        accepted_offer = _accepted_offer(db, incident.id)
+        if accepted_offer:
+            accepted_offer.status = models.OfferStatus.REJECTED
+
+        existing_payment = db.query(models.Payment).filter(
+            models.Payment.incident_id == incident.id
+        ).first()
+        if existing_payment and (existing_payment.payment_type or "service") == "service":
+            existing_payment.payment_status = "rejected"
+            existing_payment.is_paid = False
+            existing_payment.notes = "Servicio cancelado por técnico o taller; pago de servicio anulado"
+
+        incident.technician_id = None
+        incident.workshop_id = None
+        incident.estimated_arrival_time = None
+        incident.remaining_distance_meters = None
+        incident.route_polyline = None
+        incident.status = models.IncidentStatus.WAITING_OFFERS
+
+        history_notes = "Servicio cancelado por técnico o taller. Incidente disponible para nuevas cotizaciones."
+        if reason:
+            history_notes = f"{history_notes} Motivo: {reason}"
+
+        db.add(models.IncidentHistory(
+            incident_id=incident.id,
+            status=incident.status,
+            changed_by_user_id=current_user.id,
+            notes=history_notes,
+        ))
+        create_notification(
+            db,
+            user_id=incident.user_id,
+            incident_id=incident.id,
+            title="Servicio cancelado por el taller",
+            message="El servicio fue cancelado por el técnico o taller. La emergencia volverá a estar disponible para recibir nuevas cotizaciones.",
+            notification_type="service_cancelled_by_workshop",
+        )
+
+        db.commit()
+        await _broadcast_incident_status(
+            incident,
+            "El servicio fue cancelado por el técnico o taller. La emergencia volverá a espera de cotizaciones.",
+        )
+        return schemas.IncidentCancelResponse(
+            incident_id=incident.id,
+            status=incident.status,
+            requires_payment=False,
+            message="El servicio fue cancelado por el técnico o taller. La emergencia volverá a estar disponible para recibir nuevas cotizaciones.",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Tu rol no puede cancelar incidentes"
+    )
 
 
 @router.patch("/{incident_id}", response_model=schemas.IncidentResponse)
