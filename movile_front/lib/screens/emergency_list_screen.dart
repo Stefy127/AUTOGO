@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -23,6 +22,7 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
   List<Incident> _incidents = [];
   bool _isLoading = true;
   int? _stripeLoadingPaymentId;
+  Timer? _etaRefreshTimer;
 
   @override
   void initState() {
@@ -31,6 +31,26 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
     _etaRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+  }
+
+  void _showIncidentDetailsLive(Incident incident) {
+    final hasLiveTracking = incident.status == 'assigned' ||
+        incident.status == 'accepted' ||
+        incident.status == 'on_route' ||
+        incident.status == 'in_service' ||
+        incident.status == 'in_progress';
+
+    if (hasLiveTracking) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => IncidentTrackingScreen(incident: incident),
+        ),
+      );
+      return;
+    }
+
+    _showIncidentDetails(incident);
   }
 
   @override
