@@ -34,22 +34,6 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
   }
 
   void _showIncidentDetailsLive(Incident incident) {
-    final hasLiveTracking = incident.status == 'assigned' ||
-        incident.status == 'accepted' ||
-        incident.status == 'on_route' ||
-        incident.status == 'in_service' ||
-        incident.status == 'in_progress';
-
-    if (hasLiveTracking) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => IncidentTrackingScreen(incident: incident),
-        ),
-      );
-      return;
-    }
-
     _showIncidentDetails(incident);
   }
 
@@ -819,10 +803,10 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                     ],
 
                   ],
-                  if (incident.id != null &&
+                    if (incident.id != null &&
                       (incident.status == 'pending' ||
-                          incident.status == 'waiting_offers' ||
-                          incident.status == 'assigned')) ...[
+                        incident.status == 'waiting_offers' ||
+                        incident.status == 'assigned')) ...[
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -842,6 +826,49 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                         },
                         icon: const Icon(Icons.local_offer),
                         label: const Text('Ver Ofertas de Talleres'),
+                      ),
+                    ),
+                  ],
+                  if (incident.id != null &&
+                      (incident.status == 'assigned' ||
+                          incident.status == 'accepted' ||
+                          incident.status == 'on_route')) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => IncidentTrackingScreen(incident: incident),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.route),
+                        label: const Text('Ver Seguimiento'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (incident.id != null &&
+                      (incident.status == 'in_service' ||
+                          incident.status == 'in_progress')) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: const Text(
+                        'La atención ya inició. El seguimiento en tiempo real ya no se muestra en esta etapa.',
+                        style: TextStyle(fontSize: 14),
                       ),
                     ),
                   ],

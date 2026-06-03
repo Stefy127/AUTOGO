@@ -80,6 +80,15 @@ async def create_offer(
             )
 
     estimated_arrival_time = offer_data.estimated_arrival_time
+    # Normalize incoming ETA: some clients may send milliseconds instead of seconds.
+    # If value is unusually large (greater than ~2 days in seconds), assume milliseconds and convert.
+    if estimated_arrival_time is not None:
+        try:
+            if int(estimated_arrival_time) > 200000:
+                estimated_arrival_time = int(int(estimated_arrival_time) / 1000)
+        except Exception:
+            # If parsing fails, ignore and keep original
+            pass
     if (
         estimated_arrival_time is None
         and workshop.latitude is not None
