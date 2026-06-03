@@ -8,30 +8,12 @@
     </div>
 
     <nav class="sidebar-nav">
-      <a class="nav-item" routerLink="/dashboard">
-        <span class="nav-icon">📊</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Dashboard</span>
-      </a>
-      <a class="nav-item active" routerLink="/admin/gestion-talleres">
-        <span class="nav-icon">🔧</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Gestión Talleres</span>
-      </a>
-      <a class="nav-item" routerLink="/admin/gestion-clientes">
-        <span class="nav-icon">👥</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Gestión Clientes</span>
-      </a>
-      <a class="nav-item" routerLink="/admin/alquiler-autos">
-        <span class="nav-icon">🚙</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Alquiler de Autos</span>
-      </a>
-      <a class="nav-item" routerLink="/admin/bitacora">
-        <span class="nav-icon">🧾</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Bitácora</span>
-      </a>
-      <a class="nav-item" routerLink="/reports/operational">
-        <span class="nav-icon">📈</span>
-        <span class="nav-text" *ngIf="sidebarOpen">Reportes Operacionales</span>
-      </a>
+      <a class="nav-item" routerLink="/dashboard"><span class="nav-icon">📊</span><span class="nav-text" *ngIf="sidebarOpen">Dashboard</span></a>
+      <a class="nav-item active" routerLink="/admin/gestion-talleres"><span class="nav-icon">🔧</span><span class="nav-text" *ngIf="sidebarOpen">Gesti&oacute;n Talleres</span></a>
+      <a class="nav-item" routerLink="/admin/gestion-clientes"><span class="nav-icon">👥</span><span class="nav-text" *ngIf="sidebarOpen">Gesti&oacute;n Clientes</span></a>
+      <a class="nav-item" routerLink="/admin/alquiler-autos"><span class="nav-icon">🚙</span><span class="nav-text" *ngIf="sidebarOpen">Alquiler de Autos</span></a>
+      <a class="nav-item" routerLink="/admin/bitacora"><span class="nav-icon">🧾</span><span class="nav-text" *ngIf="sidebarOpen">Bit&aacute;cora</span></a>
+      <a class="nav-item" routerLink="/reports/operational"><span class="nav-icon">📈</span><span class="nav-text" *ngIf="sidebarOpen">Reportes Operacionales</span></a>
     </nav>
 
     <div class="sidebar-footer">
@@ -44,7 +26,7 @@
       </div>
       <button class="btn-logout" (click)="logout()" [title]="sidebarOpen ? '' : 'Cerrar Sesión'">
         <span class="logout-icon">🚪</span>
-        <span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesión</span>
+        <span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesi&oacute;n</span>
       </button>
     </div>
   </aside>
@@ -52,54 +34,277 @@
   <main class="main-content" [class.expanded]="!sidebarOpen">
     <header class="top-bar">
       <button class="btn-toggle" (click)="toggleSidebar()">☰</button>
-      <h1>Gestión Talleres</h1>
+      <h1>Gesti&oacute;n de Talleres</h1>
     </header>
 
     <section class="content-area">
-      <div class="section-card">
-      <h2 class="section-title">Listado de Talleres</h2>
-      <div class="alert" *ngIf="error">{{ error }}</div>
-      <p *ngIf="loading">Cargando talleres...</p>
-
-      <div class="table-wrapper" *ngIf="!loading">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Email</th>
-            <th>Teléfono</th>
-            <th>Rol</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let user of users">
-            <td>{{ user.id }}</td>
-            <td>
-              <input *ngIf="editingUserId === user.id" [(ngModel)]="editForm.full_name" />
-              <span *ngIf="editingUserId !== user.id">{{ user.full_name }}</span>
-            </td>
-            <td>
-              <input *ngIf="editingUserId === user.id" [(ngModel)]="editForm.email" />
-              <span *ngIf="editingUserId !== user.id">{{ user.email }}</span>
-            </td>
-            <td>
-              <input *ngIf="editingUserId === user.id" [(ngModel)]="editForm.phone" />
-              <span *ngIf="editingUserId !== user.id">{{ user.phone || '-' }}</span>
-            </td>
-            <td>{{ user.role }}</td>
-            <td class="actions">
-              <button *ngIf="editingUserId !== user.id" (click)="startEdit(user)">Editar</button>
-              <button *ngIf="editingUserId === user.id" (click)="saveEdit(user.id)">Guardar</button>
-              <button *ngIf="editingUserId === user.id" (click)="cancelEdit()">Cancelar</button>
-              <button class="danger" (click)="deleteUser(user)">Eliminar</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="page-hero">
+        <div class="hero-copy">
+          <span class="eyebrow">Administraci&oacute;n tenant</span>
+          <h2>Gesti&oacute;n de talleres</h2>
+          <p>Administra talleres/tenants creando el usuario due&ntilde;o workshop y el taller asociado en una sola operaci&oacute;n.</p>
+        </div>
+        <button class="primary-btn" type="button" (click)="openCreateWorkshopModal()">+ Crear taller</button>
       </div>
+
+      <div class="message error" *ngIf="errorMessage">{{ errorMessage }}</div>
+      <div class="message success" *ngIf="successMessage">{{ successMessage }}</div>
+
+      <div class="kpi-grid">
+        <article class="kpi-card">
+          <span>Total talleres</span>
+          <strong>{{ stats.totalWorkshops }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span>Activos</span>
+          <strong>{{ stats.activeWorkshops }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span>Inactivos</span>
+          <strong>{{ stats.inactiveWorkshops }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span>T&eacute;cnicos vinculados</span>
+          <strong>{{ stats.technicians }}</strong>
+        </article>
+      </div>
+
+      <div class="section-card filter-card">
+        <div>
+          <h3>Filtros</h3>
+          <p>Filtra la lista cargada desde <code>/admin/tenant/workshops</code>.</p>
+        </div>
+        <div class="filters">
+          <input [(ngModel)]="search" (input)="applyFilters()" placeholder="Buscar por taller, direcci&oacute;n, due&ntilde;o o correo" />
+          <select [(ngModel)]="statusFilter" (change)="applyFilters()">
+            <option value="all">Todos los estados</option>
+            <option value="active">Solo activos</option>
+            <option value="inactive">Solo inactivos</option>
+          </select>
+          <button class="btn-soft" type="button" (click)="clearFilters()">Limpiar filtros</button>
+        </div>
+      </div>
+
+      <div class="section-card tenant-table-card">
+        <div class="section-head">
+          <div>
+            <h3>Talleres registrados</h3>
+            <p>{{ filteredWorkshops.length }} de {{ workshops.length }} talleres visibles</p>
+          </div>
+        </div>
+
+        <div class="state-box" *ngIf="isLoading">
+          <div class="spinner"></div>
+          <p>Cargando talleres...</p>
+        </div>
+
+        <div class="state-box" *ngIf="!isLoading && workshops.length === 0">
+          <strong>No hay talleres registrados.</strong>
+          <p>Crea el primer taller registrando su due&ntilde;o workshop y seleccionando una ubicaci&oacute;n en el mapa.</p>
+        </div>
+
+        <div class="state-box" *ngIf="!isLoading && workshops.length > 0 && filteredWorkshops.length === 0">
+          <strong>No hay resultados para los filtros seleccionados.</strong>
+          <p>Prueba limpiar filtros o buscar con otro t&eacute;rmino.</p>
+        </div>
+
+        <div class="table-shell" *ngIf="!isLoading && filteredWorkshops.length > 0">
+          <table class="tenant-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Taller</th>
+                <th>Due&ntilde;o</th>
+                <th>Correo</th>
+                <th>Direcci&oacute;n</th>
+                <th>Comisi&oacute;n</th>
+                <th>Estado</th>
+                <th>T&eacute;cnicos</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let workshop of filteredWorkshops">
+                <td class="id-cell">{{ workshop.id }}</td>
+                <td>
+                  <div class="cell-main">{{ workshop.name }}</div>
+                  <div class="cell-sub">Tenant #{{ workshop.id }}</div>
+                </td>
+                <td>
+                  <div class="cell-main">{{ workshop.owner_name || '-' }}</div>
+                  <div class="cell-sub">Owner ID {{ workshop.owner_id }}</div>
+                </td>
+                <td class="truncate">{{ workshop.owner_email || '-' }}</td>
+                <td>
+                  <div class="two-line">{{ workshop.address || '-' }}</div>
+                </td>
+                <td class="center">{{ workshop.commission_percentage | number:'1.0-2' }}%</td>
+                <td class="center">
+                  <span class="badge" [ngClass]="workshop.is_active ? 'active' : 'inactive'">
+                    {{ workshop.is_active ? 'Activo' : 'Inactivo' }}
+                  </span>
+                </td>
+                <td class="center">
+                  <span class="count-badge">{{ workshop.technician_count || 0 }}</span>
+                  <small>{{ workshop.active_technician_count || 0 }} activos</small>
+                </td>
+                <td>
+                  <div class="actions">
+                    <button class="btn-ghost" type="button" (click)="goToDetail(workshop.id)">Gestionar</button>
+                    <button class="btn-soft" type="button" (click)="openEditWorkshopModal(workshop)">Editar</button>
+                    <button
+                      type="button"
+                      [ngClass]="workshop.is_active ? 'btn-danger' : 'btn-success'"
+                      (click)="toggleWorkshopStatus(workshop)">
+                      {{ workshop.is_active ? 'Desactivar' : 'Activar' }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
+</div>
+
+<div class="modal" *ngIf="isCreateModalOpen">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3>Crear taller</h3>
+        <p>Crea el due&ntilde;o workshop y el taller asociado en una sola operaci&oacute;n.</p>
+      </div>
+      <button class="modal-close" type="button" (click)="closeModals()">&times;</button>
+    </div>
+
+    <div class="form-section-title">A. Datos del due&ntilde;o</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Nombre completo</label>
+        <input [(ngModel)]="createForm.owner.full_name" placeholder="Ej: Juan P&eacute;rez" />
+      </div>
+
+      <div class="field">
+        <label>Correo</label>
+        <input type="email" [(ngModel)]="createForm.owner.email" placeholder="dueno.taller@correo.com" />
+      </div>
+
+      <div class="field">
+        <label>Tel&eacute;fono</label>
+        <input [(ngModel)]="createForm.owner.phone" placeholder="70000000" />
+      </div>
+
+      <div class="field">
+        <label>Contrase&ntilde;a temporal</label>
+        <input type="password" [(ngModel)]="createForm.owner.password" placeholder="M&iacute;nimo 6 caracteres" />
+      </div>
+    </div>
+
+    <div class="form-section-title with-space">B. Datos del taller</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>Nombre del taller</label>
+        <input [(ngModel)]="createForm.workshop.name" placeholder="Ej: Taller Central" />
+      </div>
+
+      <div class="field">
+        <label>Comisi&oacute;n (%)</label>
+        <input type="number" min="0" max="100" step="0.1" [(ngModel)]="createForm.workshop.commission_percentage" />
+      </div>
+
+      <div class="field full">
+        <label>Direcci&oacute;n</label>
+        <input [(ngModel)]="createForm.workshop.address" placeholder="Selecciona una ubicaci&oacute;n en el mapa" readonly />
+      </div>
+
+      <div class="field full">
+        <label>Ubicaci&oacute;n del taller</label>
+        <div class="map-panel">
+          <app-map-picker
+            [initialLat]="createForm.workshop.latitude || 19.432608"
+            [initialLng]="createForm.workshop.longitude || -99.133209"
+            (locationSelected)="onCreateWorkshopLocationSelected($event)">
+          </app-map-picker>
+        </div>
+        <small class="coords-hint" *ngIf="createForm.workshop.latitude !== null && createForm.workshop.longitude !== null">
+          Ubicaci&oacute;n seleccionada: {{ createForm.workshop.latitude }}, {{ createForm.workshop.longitude }}
+        </small>
+        <small class="coords-hint error" *ngIf="createForm.workshop.latitude === null || createForm.workshop.longitude === null">
+          Debes seleccionar una ubicaci&oacute;n en el mapa.
+        </small>
+      </div>
+
+      <label class="check-row full">
+        <input type="checkbox" [(ngModel)]="createForm.workshop.is_active" />
+        Crear taller como activo
+      </label>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-soft" type="button" (click)="closeModals()" [disabled]="isSubmitting">Cancelar</button>
+      <button class="primary-btn" type="button" (click)="createWorkshop()" [disabled]="isSubmitting">
+        {{ isSubmitting ? 'Guardando...' : 'Guardar taller' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" *ngIf="isEditModalOpen">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3>Editar taller</h3>
+        <p>Actualiza nombre, ubicaci&oacute;n, comisi&oacute;n y estado del taller.</p>
+      </div>
+      <button class="modal-close" type="button" (click)="closeModals()">&times;</button>
+    </div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>Nombre del taller</label>
+        <input [(ngModel)]="editForm.name" placeholder="Nombre del taller" />
+      </div>
+
+      <div class="field">
+        <label>Comisi&oacute;n (%)</label>
+        <input type="number" min="0" max="100" step="0.1" [(ngModel)]="editForm.commission_percentage" />
+      </div>
+
+      <div class="field full">
+        <label>Direcci&oacute;n</label>
+        <input [(ngModel)]="editForm.address" placeholder="Selecciona una ubicaci&oacute;n en el mapa" readonly />
+      </div>
+
+      <div class="field full">
+        <label>Ubicaci&oacute;n del taller</label>
+        <div class="map-panel">
+          <app-map-picker
+            [initialLat]="editForm.latitude || 19.432608"
+            [initialLng]="editForm.longitude || -99.133209"
+            (locationSelected)="onEditWorkshopLocationSelected($event)">
+          </app-map-picker>
+        </div>
+        <small class="coords-hint" *ngIf="editForm.latitude !== null && editForm.longitude !== null">
+          Ubicaci&oacute;n seleccionada: {{ editForm.latitude }}, {{ editForm.longitude }}
+        </small>
+        <small class="coords-hint error" *ngIf="editForm.latitude === null || editForm.longitude === null">
+          Debes seleccionar una ubicaci&oacute;n en el mapa.
+        </small>
+      </div>
+
+      <label class="check-row full">
+        <input type="checkbox" [(ngModel)]="editForm.is_active" />
+        Taller activo
+      </label>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-soft" type="button" (click)="closeModals()" [disabled]="isSubmitting">Cancelar</button>
+      <button class="primary-btn" type="button" (click)="saveWorkshopEdit()" [disabled]="isSubmitting">
+        {{ isSubmitting ? 'Guardando...' : 'Guardar cambios' }}
+      </button>
+    </div>
+  </div>
 </div>

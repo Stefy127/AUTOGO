@@ -1,0 +1,18 @@
+﻿<div class="stripe-return-page success-page">
+  <main class="return-card">
+    <div class="status-icon success-icon">&#10003;</div>
+    <p class="eyebrow">Stripe Checkout</p>
+    <h1>Pago exitoso</h1>
+    <p class="message">Tu pago fue procesado correctamente.</p>
+    <p class="helper">Puedes volver a la aplicaci&oacute;n AUTOGO para continuar.</p>
+
+    <div class="session-box" *ngIf="sessionId">
+      <span>Sesi&oacute;n</span>
+      <code>{{ sessionId }}</code>
+    </div>
+
+    <div class="actions">
+      <a routerLink="/login" class="primary-link">Ir al inicio</a>
+    </div>
+  </main>
+</div>

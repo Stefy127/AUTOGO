@@ -1,0 +1,206 @@
+﻿<div class="dashboard-container">
+  <aside class="sidebar" [class.closed]="!sidebarOpen">
+    <div class="sidebar-header">
+      <div class="logo"><span class="logo-icon">🚗</span><span class="logo-text">AutoGo Admin</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a class="nav-item" routerLink="/dashboard"><span class="nav-icon">📊</span><span class="nav-text" *ngIf="sidebarOpen">Dashboard</span></a>
+      <a class="nav-item active" routerLink="/admin/gestion-talleres"><span class="nav-icon">🔧</span><span class="nav-text" *ngIf="sidebarOpen">Gestión Talleres</span></a>
+      <a class="nav-item" routerLink="/admin/gestion-clientes"><span class="nav-icon">👥</span><span class="nav-text" *ngIf="sidebarOpen">Gestión Clientes</span></a>
+      <a class="nav-item" routerLink="/admin/alquiler-autos"><span class="nav-icon">🚙</span><span class="nav-text" *ngIf="sidebarOpen">Alquiler de Autos</span></a>
+      <a class="nav-item" routerLink="/admin/bitacora"><span class="nav-icon">🧾</span><span class="nav-text" *ngIf="sidebarOpen">Bitácora</span></a>
+      <a class="nav-item" routerLink="/reports/operational"><span class="nav-icon">📈</span><span class="nav-text" *ngIf="sidebarOpen">Reportes Operacionales</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-profile" *ngIf="currentUser">
+        <div class="user-avatar">{{ currentUser.full_name.charAt(0).toUpperCase() }}</div>
+        <div class="user-info" *ngIf="sidebarOpen"><div class="user-name">{{ currentUser.full_name }}</div><div class="user-role">Administrador</div></div>
+      </div>
+      <button class="btn-logout" (click)="logout()"><span class="logout-icon">🚪</span><span class="logout-text" *ngIf="sidebarOpen">Cerrar Sesión</span></button>
+    </div>
+  </aside>
+
+  <main class="main-content" [class.expanded]="!sidebarOpen">
+    <header class="top-bar">
+      <button class="btn-toggle" (click)="toggleSidebar()">☰</button>
+      <h1>Detalle de Taller</h1>
+    </header>
+
+    <section class="content-area tenant-detail-page">
+      <div class="detail-hero">
+        <div>
+          <button class="back-link" type="button" (click)="backToList()">← Volver a talleres</button>
+          <h2>{{ workshop?.name || 'Taller' }}</h2>
+          <p>Tenant operativo / taller registrado</p>
+        </div>
+        <span class="status-badge" [ngClass]="workshop?.is_active ? 'active' : 'inactive'" *ngIf="workshop">
+          {{ workshop.is_active ? 'Activo' : 'Inactivo' }}
+        </span>
+      </div>
+
+      <div class="message error" *ngIf="errorMessage">{{ errorMessage }}</div>
+      <div class="message success" *ngIf="successMessage">{{ successMessage }}</div>
+
+      <div class="state-box" *ngIf="isLoading">
+        <div class="spinner"></div>
+        <p>Cargando detalle del taller...</p>
+      </div>
+
+      <ng-container *ngIf="workshop && !isLoading">
+        <div class="summary-grid">
+          <article class="summary-card">
+            <span>Comisión</span>
+            <strong>{{ workshop.commission_percentage | number:'1.0-2' }}%</strong>
+          </article>
+          <article class="summary-card">
+            <span>Técnicos totales</span>
+            <strong>{{ workshop.technician_count || 0 }}</strong>
+          </article>
+          <article class="summary-card">
+            <span>Técnicos activos</span>
+            <strong>{{ workshop.active_technician_count || 0 }}</strong>
+          </article>
+          <article class="summary-card owner-card">
+            <span>Dueño del taller</span>
+            <strong>{{ workshop.owner_name || '-' }}</strong>
+          </article>
+        </div>
+
+        <div class="info-card">
+          <div class="section-heading">
+            <h3>Información del taller</h3>
+            <p>Datos principales del tenant registrado.</p>
+          </div>
+          <div class="info-grid">
+            <div><label>ID del taller</label><p>{{ workshop.id }}</p></div>
+            <div><label>Nombre</label><p>{{ workshop.name }}</p></div>
+            <div class="wide"><label>Dirección</label><p>{{ workshop.address }}</p></div>
+            <div><label>Coordenadas</label><p>{{ workshop.latitude }}, {{ workshop.longitude }}</p></div>
+            <div><label>Comisión</label><p>{{ workshop.commission_percentage | number:'1.0-2' }}%</p></div>
+            <div><label>Estado</label><p>{{ workshop.is_active ? 'Activo' : 'Inactivo' }}</p></div>
+            <div><label>Dueño</label><p>{{ workshop.owner_name || '-' }}</p></div>
+            <div><label>Correo dueño</label><p>{{ workshop.owner_email || '-' }}</p></div>
+            <div><label>Teléfono dueño</label><p>{{ workshop.owner_phone || '-' }}</p></div>
+          </div>
+        </div>
+
+        <div class="users-card">
+          <div class="section-heading with-action">
+            <div>
+              <h3>Owner y técnicos asociados</h3>
+              <p>El owner es solo lectura. Las acciones aplican únicamente a técnicos y usan technician_id.</p>
+            </div>
+            <button class="primary-action" type="button" (click)="openCreateTechnicianModal()">+ Crear técnico</button>
+          </div>
+
+          <div class="empty-state" *ngIf="users.length === 0">
+            No hay usuarios asociados para este taller.
+          </div>
+
+          <div class="empty-state" *ngIf="users.length > 0 && technicianRows.length === 0">
+            El taller tiene owner registrado, pero todavía no tiene técnicos.
+          </div>
+
+          <div class="tenant-detail-table-scroll" *ngIf="users.length > 0">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Usuario ID</th>
+                  <th>Técnico ID</th>
+                  <th>Nombre</th>
+                  <th>Correo</th>
+                  <th>Teléfono</th>
+                  <th>Rol</th>
+                  <th>Estado</th>
+                  <th>Disponibilidad</th>
+                  <th>Código acceso</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of users">
+                  <td><span class="type-badge" [ngClass]="row.row_type">{{ getRelationLabel(row) }}</span></td>
+                  <td class="centered">{{ row.user_id || '-' }}</td>
+                  <td class="centered">{{ row.technician_id || '-' }}</td>
+                  <td><strong>{{ row.full_name || '-' }}</strong></td>
+                  <td class="truncate">{{ row.email || '-' }}</td>
+                  <td>{{ row.phone || '-' }}</td>
+                  <td><span class="role-chip">{{ row.role || '-' }}</span></td>
+                  <td><span class="status-badge small" [ngClass]="row.is_active ? 'active' : 'inactive'">{{ row.is_active ? 'Activo' : 'Inactivo' }}</span></td>
+                  <td>
+                    <span class="availability-badge" [ngClass]="row.is_available ? 'available' : 'unavailable'">
+                      {{ row.is_available === null ? '-' : (row.is_available ? 'Disponible' : 'No disponible') }}
+                    </span>
+                  </td>
+                  <td><code class="access-code">{{ row.access_code || '-' }}</code></td>
+                  <td>
+                    <div class="actions" *ngIf="row.row_type === 'technician'; else ownerActions">
+                      <button class="soft-action" type="button" (click)="openEditTechnicianModal(row)" [disabled]="!row.technician_id">Editar</button>
+                      <button class="danger-action" type="button" (click)="toggleTechnicianStatus(row)" [disabled]="!row.technician_id">
+                        {{ row.is_active ? 'Desactivar' : 'Activar' }}
+                      </button>
+                    </div>
+                    <ng-template #ownerActions>
+                      <span class="read-only">Solo lectura</span>
+                    </ng-template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </ng-container>
+    </section>
+  </main>
+</div>
+
+<div class="modal" *ngIf="isCreateModalOpen">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3>Crear técnico</h3>
+        <p>Crea un técnico asociado a este taller.</p>
+      </div>
+      <button class="modal-close" type="button" (click)="closeModals()">×</button>
+    </div>
+
+    <div class="form-grid">
+      <div class="field"><label>Nombre completo</label><input [(ngModel)]="createForm.full_name" placeholder="Nombre completo" /></div>
+      <div class="field"><label>Correo</label><input type="email" [(ngModel)]="createForm.email" placeholder="mecanico@correo.com" /></div>
+      <div class="field"><label>Teléfono</label><input [(ngModel)]="createForm.phone" placeholder="70000000" /></div>
+      <div class="field"><label>Contraseña temporal</label><input type="password" [(ngModel)]="createForm.password" placeholder="Mínimo 6 caracteres" /></div>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="createForm.is_active" (change)="onCreateActiveChange()" /> Técnico activo</label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="createForm.is_available" [disabled]="!createForm.is_active" /> Técnico disponible</label>
+    </div>
+
+    <div class="modal-actions">
+      <button class="secondary" type="button" (click)="closeModals()" [disabled]="isSubmitting">Cancelar</button>
+      <button type="button" (click)="createTechnician()" [disabled]="isSubmitting">{{ isSubmitting ? 'Guardando...' : 'Guardar técnico' }}</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" *ngIf="isEditModalOpen">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3>Editar técnico</h3>
+        <p>Actualiza datos operativos. No se edita correo, contraseña ni IDs.</p>
+      </div>
+      <button class="modal-close" type="button" (click)="closeModals()">×</button>
+    </div>
+
+    <div class="form-grid">
+      <div class="field"><label>Nombre completo</label><input [(ngModel)]="editForm.full_name" placeholder="Nombre completo" /></div>
+      <div class="field"><label>Teléfono</label><input [(ngModel)]="editForm.phone" placeholder="70000000" /></div>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="editForm.is_active" (change)="onEditActiveChange()" /> Técnico activo</label>
+      <label class="check-row"><input type="checkbox" [(ngModel)]="editForm.is_available" [disabled]="!editForm.is_active" /> Técnico disponible</label>
+    </div>
+
+    <div class="modal-actions">
+      <button class="secondary" type="button" (click)="closeModals()" [disabled]="isSubmitting">Cancelar</button>
+      <button type="button" (click)="saveTechnicianEdit()" [disabled]="isSubmitting">{{ isSubmitting ? 'Guardando...' : 'Guardar cambios' }}</button>
+    </div>
+  </div>
+</div>
