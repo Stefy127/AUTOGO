@@ -211,6 +211,13 @@ export interface Offer {
   technician_id?: number;
   amount: number;
   estimated_arrival_time?: number;
+  repair_time_minutes?: number;
+  diagnosis_cost?: number;
+  labor_cost?: number;
+  parts_cost?: number;
+  transport_cost?: number;
+  additional_cost?: number;
+  price_explanation?: string;
   notes?: string;
   status: 'pending' | 'accepted' | 'rejected';
   created_at: string;

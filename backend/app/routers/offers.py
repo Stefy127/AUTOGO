@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 import math
@@ -12,6 +13,12 @@ from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/offers", tags=["offers"])
 mapbox_service = MapboxService()
+
+
+def _money_or_zero(value) -> Decimal:
+    if value is None:
+        return Decimal("0")
+    return Decimal(str(value))
 
 
 @router.post("", response_model=schemas.OfferResponse, status_code=status.HTTP_201_CREATED)
@@ -65,6 +72,22 @@ async def create_offer(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You already submitted a pending offer for this incident"
+        )
+
+    amount = sum(
+        _money_or_zero(cost)
+        for cost in [
+            offer_data.diagnosis_cost,
+            offer_data.labor_cost,
+            offer_data.parts_cost,
+            offer_data.transport_cost,
+            offer_data.additional_cost,
+        ]
+    )
+    if amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cotización debe tener un monto total mayor a 0"
         )
 
     selected_technician_id = offer_data.technician_id
@@ -127,8 +150,15 @@ async def create_offer(
         incident_id=incident.id,
         workshop_id=workshop.id,
         technician_id=selected_technician_id,
-        amount=offer_data.amount,
+        amount=amount,
         estimated_arrival_time=estimated_arrival_time,
+        diagnosis_cost=offer_data.diagnosis_cost,
+        labor_cost=offer_data.labor_cost,
+        parts_cost=offer_data.parts_cost,
+        transport_cost=offer_data.transport_cost,
+        additional_cost=offer_data.additional_cost,
+        repair_time_minutes=offer_data.repair_time_minutes,
+        price_explanation=offer_data.price_explanation,
         notes=offer_data.notes,
         status=models.OfferStatus.PENDING
     )
@@ -155,7 +185,7 @@ async def create_offer(
         user_id=incident.user_id,
         incident_id=incident.id,
         title="Nueva oferta recibida",
-        message=f"{workshop.name} envio una oferta de ${float(offer_data.amount):.2f} para tu emergencia.",
+        message=f"{workshop.name} envio una oferta de ${float(amount):.2f} para tu emergencia.",
         notification_type="offer_received",
     )
 

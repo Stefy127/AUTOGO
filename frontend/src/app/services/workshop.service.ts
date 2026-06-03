@@ -112,10 +112,20 @@ export class WorkshopService {
     );
   }
 
-  createOffer(incidentId: number, technicianId: number, amount: number): Observable<Offer> {
+  createOffer(incidentId: number, payload: {
+    technician_id?: number;
+    estimated_arrival_time?: number;
+    diagnosis_cost?: number;
+    labor_cost?: number;
+    parts_cost?: number;
+    transport_cost?: number;
+    additional_cost?: number;
+    repair_time_minutes?: number;
+    price_explanation?: string;
+    notes?: string;
+  }): Observable<Offer> {
     const body = {
-      technician_id: technicianId,
-      amount,
+      ...payload,
       incident_id: incidentId
     };
     return this.http.post<Offer>(

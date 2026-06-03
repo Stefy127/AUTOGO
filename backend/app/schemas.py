@@ -272,9 +272,15 @@ class IncidentAccept(BaseModel):
 
 class OfferCreate(BaseModel):
     incident_id: int
-    amount: float = Field(..., gt=0)
     technician_id: Optional[int] = None
     estimated_arrival_time: Optional[int] = Field(default=None, ge=1)
+    diagnosis_cost: Optional[float] = Field(default=None, ge=0)
+    labor_cost: Optional[float] = Field(default=None, ge=0)
+    parts_cost: Optional[float] = Field(default=None, ge=0)
+    transport_cost: Optional[float] = Field(default=None, ge=0)
+    additional_cost: Optional[float] = Field(default=None, ge=0)
+    repair_time_minutes: Optional[int] = Field(default=None, ge=1)
+    price_explanation: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -289,6 +295,13 @@ class OfferResponse(BaseModel):
     technician_id: Optional[int] = None
     amount: float
     estimated_arrival_time: Optional[int] = None
+    repair_time_minutes: Optional[int] = None
+    diagnosis_cost: Optional[float] = None
+    labor_cost: Optional[float] = None
+    parts_cost: Optional[float] = None
+    transport_cost: Optional[float] = None
+    additional_cost: Optional[float] = None
+    price_explanation: Optional[str] = None
     notes: Optional[str] = None
     status: OfferStatus
     created_at: datetime

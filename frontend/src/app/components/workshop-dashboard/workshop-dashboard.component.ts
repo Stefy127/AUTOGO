@@ -57,7 +57,14 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   selectedIncident: Incident | null = null;
   acceptForm = {
     technician_id: undefined as number | undefined,
-    amount: undefined as number | undefined
+    diagnosis_cost: undefined as number | undefined,
+    labor_cost: undefined as number | undefined,
+    parts_cost: undefined as number | undefined,
+    transport_cost: undefined as number | undefined,
+    additional_cost: undefined as number | undefined,
+    repair_time_minutes: undefined as number | undefined,
+    price_explanation: '',
+    notes: ''
   };
 
   // Navigation state
@@ -608,29 +615,63 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     // Reset form
     this.acceptForm = {
       technician_id: this.technicians.length > 0 ? this.technicians[0].id : undefined,
-      amount: undefined
+      diagnosis_cost: undefined,
+      labor_cost: undefined,
+      parts_cost: undefined,
+      transport_cost: undefined,
+      additional_cost: undefined,
+      repair_time_minutes: undefined,
+      price_explanation: '',
+      notes: ''
     };
   }
 
+  private parseQuoteAmount(value: number | string | undefined): number {
+    if (value === undefined || value === null || value === '') {
+      return 0;
+    }
+    const parsed = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  getQuoteTotal(): number {
+    return [
+      this.acceptForm.diagnosis_cost,
+      this.acceptForm.labor_cost,
+      this.acceptForm.parts_cost,
+      this.acceptForm.transport_cost,
+      this.acceptForm.additional_cost
+    ].reduce<number>((total, value) => total + this.parseQuoteAmount(value), 0);
+  }
+
   confirmAcceptIncident(): void {
-    if (!this.selectedIncident?.id || !this.acceptForm.technician_id || !this.acceptForm.amount) {
-      this.error = 'Debes seleccionar un mecánico e ingresar el monto estimado';
+    if (!this.selectedIncident?.id || !this.acceptForm.technician_id) {
+      this.error = 'Debes seleccionar un mecanico';
       return;
     }
 
-    const amount = typeof this.acceptForm.amount === 'string' 
-      ? parseFloat(this.acceptForm.amount) 
-      : this.acceptForm.amount;
+    const quotePayload = {
+      technician_id: this.acceptForm.technician_id,
+      diagnosis_cost: this.parseQuoteAmount(this.acceptForm.diagnosis_cost),
+      labor_cost: this.parseQuoteAmount(this.acceptForm.labor_cost),
+      parts_cost: this.parseQuoteAmount(this.acceptForm.parts_cost),
+      transport_cost: this.parseQuoteAmount(this.acceptForm.transport_cost),
+      additional_cost: this.parseQuoteAmount(this.acceptForm.additional_cost),
+      repair_time_minutes: this.acceptForm.repair_time_minutes
+        ? Number(this.acceptForm.repair_time_minutes)
+        : undefined,
+      price_explanation: this.acceptForm.price_explanation?.trim() || undefined,
+      notes: this.acceptForm.notes?.trim() || undefined
+    };
 
-    if (isNaN(amount) || amount <= 0) {
-      this.error = 'El monto debe ser un número válido mayor que 0';
+    if (this.getQuoteTotal() <= 0) {
+      this.error = 'La cotizacion debe tener un monto total mayor a 0';
       return;
     }
 
     this.workshopService.createOffer(
-      this.selectedIncident.id, 
-      this.acceptForm.technician_id,
-      amount
+      this.selectedIncident.id,
+      quotePayload
     ).subscribe({
       next: () => {
         this.loadAvailableIncidents();
@@ -649,13 +690,19 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
       }
     });
   }
-
   cancelAcceptIncident(): void {
     this.showAcceptModal = false;
     this.selectedIncident = null;
     this.acceptForm = {
       technician_id: undefined,
-      amount: undefined
+      diagnosis_cost: undefined,
+      labor_cost: undefined,
+      parts_cost: undefined,
+      transport_cost: undefined,
+      additional_cost: undefined,
+      repair_time_minutes: undefined,
+      price_explanation: '',
+      notes: ''
     };
   }
 
@@ -776,3 +823,4 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     });
   }
 }
+

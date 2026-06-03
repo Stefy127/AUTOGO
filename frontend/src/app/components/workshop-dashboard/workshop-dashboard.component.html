@@ -733,24 +733,59 @@
             <small class="hint">Solo mecánicos disponibles pueden ser asignados</small>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label>Diagnostico</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.diagnosis_cost" name="diagnosis_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Mano de obra</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.labor_cost" name="labor_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Repuestos</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.parts_cost" name="parts_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Traslado</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.transport_cost" name="transport_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Adicionales</label>
+              <input type="number" step="0.01" min="0" class="form-control"
+                [(ngModel)]="acceptForm.additional_cost" name="additional_cost" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+              <label>Tiempo reparacion (min)</label>
+              <input type="number" step="1" min="1" class="form-control"
+                [(ngModel)]="acceptForm.repair_time_minutes" name="repair_time_minutes" placeholder="Ej: 90">
+            </div>
+          </div>
+
           <div class="form-group">
-            <label>💰 Tarifa Estimada del Servicio *</label>
-            <input 
-              type="number" 
-              step="0.01"
-              min="0"
-              class="form-control"
-              [(ngModel)]="acceptForm.amount"
-              name="amount"
-              required
-              placeholder="Ej: 500.00">
-            <small class="hint">
-              <strong>Ganancia mecánico ({{ (workshop?.commission_rate || 0.10) * 100 }}%):</strong> 
-              ${{ ((acceptForm.amount || 0) * (workshop?.commission_rate || 0.10)).toFixed(2) }}
-              &nbsp;|&nbsp;
-              <strong>Comisión taller ({{ (1 - (workshop?.commission_rate || 0.10)) * 100 }}%):</strong> 
-              ${{ ((acceptForm.amount || 0) * (1 - (workshop?.commission_rate || 0.10))).toFixed(2) }}
-            </small>
+            <label>Explicacion tecnica del precio</label>
+            <textarea class="form-control" rows="3" [(ngModel)]="acceptForm.price_explanation"
+              name="price_explanation" placeholder="Describe diagnostico, repuestos y alcance del trabajo"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label>Notas</label>
+            <textarea class="form-control" rows="2" [(ngModel)]="acceptForm.notes"
+              name="notes" placeholder="Observaciones para el cliente"></textarea>
+          </div>
+
+          <div class="quote-total">
+            <span>Total cotizado</span>
+            <strong>${{ getQuoteTotal().toFixed(2) }}</strong>
           </div>
         </form>
       </div>
@@ -763,10 +798,11 @@
           type="button" 
           class="btn-success" 
           (click)="confirmAcceptIncident()"
-          [disabled]="!acceptForm.technician_id || !acceptForm.amount || (acceptForm.amount || 0) <= 0">
+          [disabled]="!acceptForm.technician_id || getQuoteTotal() <= 0">
           ✅ Confirmar y Enviar
         </button>
       </div>
     </div>
   </div>
 </div>
+
