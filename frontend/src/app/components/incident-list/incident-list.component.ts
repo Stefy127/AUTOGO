@@ -101,7 +101,22 @@ export class IncidentListComponent implements OnInit {
   cancelIncident(incident: Incident): void {
     if (confirm('¿Estás seguro de que deseas cancelar esta emergencia?')) {
       this.incidentService.cancelIncident(incident.id).subscribe({
-        next: () => {
+        next: (response) => {
+          if (response.requires_payment && response.payment_id) {
+            this.router.navigate(['/payment-cancel'], {
+              queryParams: {
+                payment_id: response.payment_id,
+                incident_id: response.incident_id,
+                qr_image_url: response.qr_image_url || '',
+                amount_usd: response.penalty_amount_usd || 0,
+                amount_bob: response.penalty_amount_bob || 0,
+                payment_type: response.payment_type || '',
+                payment_status: response.payment_status || ''
+              }
+            });
+            return;
+          }
+
           this.loadIncidents();
         },
         error: (error) => {

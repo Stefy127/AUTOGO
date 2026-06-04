@@ -165,32 +165,115 @@
       <!-- Stats Cards -->
       <div class="stats-row" *ngIf="stats">
         <div class="stat-box">
-          <div class="stat-icon">📊</div>
+          <div class="stat-icon">🚨</div>
           <div class="stat-content">
-            <h4>{{ stats.total_incidents }}</h4>
-            <p>Total Atendidas</p>
-          </div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-content">
-            <h4>{{ stats.in_progress_incidents }}</h4>
-            <p>En Progreso</p>
+            <h4>{{ stats.active_incidents }}</h4>
+            <p>Servicios Activos</p>
           </div>
         </div>
         <div class="stat-box">
           <div class="stat-icon">✅</div>
           <div class="stat-content">
             <h4>{{ stats.completed_incidents }}</h4>
-            <p>Completadas</p>
+            <p>Servicios Finalizados</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">⛔</div>
+          <div class="stat-content">
+            <h4>{{ stats.cancelled_incidents }}</h4>
+            <p>Servicios Cancelados</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🧾</div>
+          <div class="stat-content">
+            <h4>{{ stats.offers_sent }}</h4>
+            <p>Cotizaciones Enviadas</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">👍</div>
+          <div class="stat-content">
+            <h4>{{ stats.offers_accepted }}</h4>
+            <p>Cotizaciones Aceptadas</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🕒</div>
+          <div class="stat-content">
+            <h4>{{ stats.offers_pending }}</h4>
+            <p>Cotizaciones Pendientes</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">💳</div>
+          <div class="stat-content">
+            <h4>{{ stats.pending_payments }}</h4>
+            <p>Pagos Pendientes</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🔎</div>
+          <div class="stat-content">
+            <h4>{{ stats.cancellation_payments_pending }}</h4>
+            <p>Cancelacion Pendiente Verif.</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🟢</div>
+          <div class="stat-content">
+            <h4>{{ stats.technicians_available }}</h4>
+            <p>Tecnicos Disponibles</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🟠</div>
+          <div class="stat-content">
+            <h4>{{ stats.technicians_busy }}</h4>
+            <p>Tecnicos Ocupados</p>
           </div>
         </div>
         <div class="stat-box earnings">
           <div class="stat-icon">💰</div>
           <div class="stat-content">
-            <h4>${{ getTotalEarnings().toFixed(2) }}</h4>
-            <p>Ganancias Totales</p>
+            <h4>${{ stats.total_earnings_usd.toFixed(2) }}</h4>
+            <p>Ganancia del Taller</p>
           </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🚗</div>
+          <div class="stat-content">
+            <h4>{{ formatMinutes(stats.average_arrival_time_minutes) }}</h4>
+            <p>Tiempo Promedio Llegada</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">🛠️</div>
+          <div class="stat-content">
+            <h4>{{ formatMinutes(stats.average_service_time_minutes) }}</h4>
+            <p>Tiempo Promedio Atencion</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card" *ngIf="stats">
+        <h3>📌 Incidentes por Estado</h3>
+        <div class="history-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Estado</th>
+                <th>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of getIncidentStatusEntries()">
+                <td>{{ getStatusText(row.status) }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

@@ -360,6 +360,12 @@ async def update_technician_incident_status(
         }
 
     if notification_payload:
+        technician_latitude = technician.current_latitude
+        technician_longitude = technician.current_longitude
+        if technician_latitude is None and technician.workshop:
+            technician_latitude = technician.workshop.latitude
+            technician_longitude = technician.workshop.longitude
+
         create_notification(
             db,
             user_id=incident.user_id,
@@ -388,6 +394,8 @@ async def update_technician_incident_status(
                 "incident_id": incident.id,
                 "status": incident.status.value,
                 "message": notification_payload["ws_message"],
+                "latitude": technician_latitude,
+                "longitude": technician_longitude,
                 "estimated_arrival_time": incident.estimated_arrival_time,
                 "remaining_distance_meters": incident.remaining_distance_meters,
                 "route_polyline": incident.route_polyline,

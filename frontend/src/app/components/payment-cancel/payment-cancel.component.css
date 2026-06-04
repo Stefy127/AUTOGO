@@ -65,6 +65,10 @@ h1 {
 
 .actions {
   margin-top: 26px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .primary-link {
@@ -79,6 +83,107 @@ h1 {
   font-weight: 900;
   text-decoration: none;
   box-shadow: 0 14px 28px rgba(234, 88, 12, 0.24);
+  border: none;
+  cursor: pointer;
+}
+
+.secondary-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 140px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.payment-summary {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff7ed;
+  color: #7c2d12;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.qr-box {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid #fed7aa;
+}
+
+.qr-box img {
+  width: 100%;
+  max-width: 280px;
+  display: block;
+  margin: 0 auto;
+  border-radius: 12px;
+}
+
+.form-field {
+  margin-top: 18px;
+  text-align: left;
+}
+
+.proof-preview {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid #fed7aa;
+  background: #fffaf3;
+  text-align: left;
+}
+
+.proof-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.proof-preview img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: #c2410c;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
+.alert {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.alert.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.alert.success {
+  background: #dcfce7;
+  color: #166534;
 }
 
 @media (max-width: 520px) {

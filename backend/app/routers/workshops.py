@@ -14,7 +14,7 @@ from app.schemas import (
     WorkshopCreate, WorkshopResponse, WorkshopUpdate,
     TechnicianCreate, TechnicianCreateSimple, TechnicianResponse,
     IncidentResponse, IncidentAccept,
-    WorkshopPaymentQRUpsert, WorkshopPaymentQRResponse
+    WorkshopPaymentQRUpsert, WorkshopPaymentQRResponse, WorkshopStatsResponse
 )
 from app.auth import get_current_user
 from app.services.assignment_service import AssignmentService
@@ -24,6 +24,33 @@ router = APIRouter(prefix="/workshops", tags=["workshops"])
 
 # Initialize services
 mapbox_service = MapboxService()
+
+
+def _parse_date_range(start_date: str | None, end_date: str | None) -> tuple[datetime | None, datetime | None]:
+    parsed_start: datetime | None = None
+    parsed_end_exclusive: datetime | None = None
+
+    try:
+        if start_date:
+            parsed_start = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            parsed_end_exclusive = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de fecha inválido. Usa YYYY-MM-DD"
+        )
+
+    return parsed_start, parsed_end_exclusive
+
+
+def _to_arrival_minutes(raw_value: int | None) -> float | None:
+    if raw_value is None:
+        return None
+    # Compatibilidad histórica: algunos registros se guardaron en segundos.
+    if raw_value > 200:
+        return raw_value / 60.0
+    return float(raw_value)
 
 
 # ==================== WORKSHOP MANAGEMENT ====================
@@ -582,8 +609,10 @@ async def get_my_incidents(
 
 # ==================== STATS ====================
 
-@router.get("/me/stats")
+@router.get("/me/stats", response_model=WorkshopStatsResponse)
 async def get_workshop_stats(
+    start_date: str | None = Query(default=None, description="Fecha inicio (YYYY-MM-DD)"),
+    end_date: str | None = Query(default=None, description="Fecha fin (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -604,42 +633,126 @@ async def get_workshop_stats(
             detail="No se encontró un taller para este usuario"
         )
     
-    # Contar incidentes por estado
-    total_incidents = db.query(Incident).filter(Incident.workshop_id == workshop.id).count()
-    accepted_incidents = db.query(Incident).filter(
-        Incident.workshop_id == workshop.id,
-        Incident.status == IncidentStatus.ACCEPTED
-    ).count()
-    in_progress_incidents = db.query(Incident).filter(
-        Incident.workshop_id == workshop.id,
-        Incident.status.in_([
-            IncidentStatus.ON_ROUTE,
-            IncidentStatus.IN_SERVICE,
-            IncidentStatus.IN_PROGRESS,
-        ])
-    ).count()
-    completed_incidents = db.query(Incident).filter(
-        Incident.workshop_id == workshop.id,
-        Incident.status == IncidentStatus.COMPLETED
-    ).count()
-    
-    # Contar técnicos
-    total_technicians = db.query(Technician).filter(Technician.workshop_id == workshop.id).count()
-    available_technicians = db.query(Technician).filter(
+    parsed_start, parsed_end_exclusive = _parse_date_range(start_date, end_date)
+
+    incidents_query = db.query(Incident).filter(Incident.workshop_id == workshop.id)
+    if parsed_start is not None:
+        incidents_query = incidents_query.filter(Incident.created_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        incidents_query = incidents_query.filter(Incident.created_at < parsed_end_exclusive)
+    incidents = incidents_query.all()
+
+    offers_query = db.query(Offer).filter(Offer.workshop_id == workshop.id)
+    if parsed_start is not None:
+        offers_query = offers_query.filter(Offer.created_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        offers_query = offers_query.filter(Offer.created_at < parsed_end_exclusive)
+    offers = offers_query.all()
+
+    payments_query = db.query(Payment).join(Incident, Payment.incident_id == Incident.id).filter(
+        Incident.workshop_id == workshop.id
+    )
+    if parsed_start is not None:
+        payments_query = payments_query.filter(Payment.created_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        payments_query = payments_query.filter(Payment.created_at < parsed_end_exclusive)
+    payments = payments_query.all()
+
+    technicians_total = db.query(Technician).filter(Technician.workshop_id == workshop.id).count()
+    technicians_available = db.query(Technician).filter(
         Technician.workshop_id == workshop.id,
         Technician.is_available == True
     ).count()
-    
-    return {
-        "workshop_id": workshop.id,
-        "workshop_name": workshop.name,
-        "total_incidents": total_incidents,
-        "accepted_incidents": accepted_incidents,
-        "in_progress_incidents": in_progress_incidents,
-        "completed_incidents": completed_incidents,
-        "total_technicians": total_technicians,
-        "available_technicians": available_technicians
-    }
+    technicians_busy = max(technicians_total - technicians_available, 0)
+
+    incidents_by_status = {status.value: 0 for status in IncidentStatus}
+    for incident in incidents:
+        incidents_by_status[incident.status.value] = incidents_by_status.get(incident.status.value, 0) + 1
+
+    total_incidents = len(incidents)
+    completed_incidents = sum(1 for i in incidents if i.status == IncidentStatus.COMPLETED)
+    cancelled_incidents = sum(1 for i in incidents if i.status == IncidentStatus.CANCELLED)
+    active_incidents = sum(1 for i in incidents if i.status not in [IncidentStatus.COMPLETED, IncidentStatus.CANCELLED])
+
+    offers_sent = len(offers)
+    offers_accepted = sum(1 for o in offers if o.status.value == "accepted")
+    offers_rejected = sum(1 for o in offers if o.status.value == "rejected")
+    offers_pending = sum(1 for o in offers if o.status.value == "pending")
+
+    paid_payments = sum(1 for p in payments if p.is_paid or (p.payment_status or "").lower() == "paid")
+    pending_payments = sum(1 for p in payments if (not p.is_paid) or (p.payment_status or "").lower() == "pending")
+    pending_verification_payments = sum(
+        1 for p in payments if (p.payment_status or "").lower() == "pending_verification"
+    )
+    cancellation_payments_pending = sum(
+        1
+        for p in payments
+        if (p.payment_type or "").lower() in ["cancellation_on_route", "cancellation_in_service"]
+        and (p.payment_status or "").lower() in ["pending", "pending_verification"]
+    )
+
+    paid_payments_rows = [
+        p for p in payments
+        if p.is_paid or (p.payment_status or "").lower() == "paid"
+    ]
+    total_earnings_usd = float(sum(float(p.workshop_earnings or 0) for p in paid_payments_rows))
+    total_earnings_bob = float(sum(float(p.amount_bob or 0) for p in paid_payments_rows if p.amount_bob is not None))
+    platform_commission_usd = float(sum(float(p.commission_amount or 0) for p in paid_payments_rows))
+
+    arrival_minutes_values = [
+        _to_arrival_minutes(i.estimated_arrival_time)
+        for i in incidents
+        if _to_arrival_minutes(i.estimated_arrival_time) is not None
+    ]
+    average_arrival_time_minutes = (
+        round(sum(arrival_minutes_values) / len(arrival_minutes_values), 2)
+        if arrival_minutes_values else 0.0
+    )
+
+    service_minutes_values = [
+        (i.completed_at - i.started_at).total_seconds() / 60.0
+        for i in incidents
+        if i.started_at is not None and i.completed_at is not None
+    ]
+    average_service_time_minutes = (
+        round(sum(service_minutes_values) / len(service_minutes_values), 2)
+        if service_minutes_values else 0.0
+    )
+
+    in_progress_incidents = sum(
+        1 for i in incidents
+        if i.status in [IncidentStatus.ON_ROUTE, IncidentStatus.IN_SERVICE, IncidentStatus.IN_PROGRESS, IncidentStatus.ACCEPTED, IncidentStatus.ASSIGNED]
+    )
+
+    return WorkshopStatsResponse(
+        workshop_id=workshop.id,
+        workshop_name=workshop.name,
+        total_incidents=total_incidents,
+        active_incidents=active_incidents,
+        completed_incidents=completed_incidents,
+        cancelled_incidents=cancelled_incidents,
+        incidents_by_status=incidents_by_status,
+        offers_sent=offers_sent,
+        offers_accepted=offers_accepted,
+        offers_rejected=offers_rejected,
+        offers_pending=offers_pending,
+        technicians_total=technicians_total,
+        technicians_available=technicians_available,
+        technicians_busy=technicians_busy,
+        paid_payments=paid_payments,
+        pending_payments=pending_payments,
+        pending_verification_payments=pending_verification_payments,
+        cancellation_payments_pending=cancellation_payments_pending,
+        total_earnings_usd=total_earnings_usd,
+        total_earnings_bob=total_earnings_bob,
+        platform_commission_usd=platform_commission_usd,
+        average_arrival_time_minutes=average_arrival_time_minutes,
+        average_service_time_minutes=average_service_time_minutes,
+        accepted_incidents=sum(1 for i in incidents if i.status == IncidentStatus.ACCEPTED),
+        in_progress_incidents=in_progress_incidents,
+        total_technicians=technicians_total,
+        available_technicians=technicians_available,
+    )
 
 
 @router.get("/me/reports/incidents/pdf")

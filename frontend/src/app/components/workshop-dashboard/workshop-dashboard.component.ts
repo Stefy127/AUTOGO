@@ -176,7 +176,7 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
   }
 
   loadStats(): void {
-    this.workshopService.getMyStats().subscribe({
+    this.workshopService.getMyStatsWithFilters().subscribe({
       next: (stats) => {
         this.stats = stats;
       },
@@ -590,9 +590,25 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
 
   // Calculate total earnings from completed incidents
   getTotalEarnings(): number {
-    return this.myIncidents
-      .filter(i => i.status === 'completed' && i.payment)
-      .reduce((sum, i) => sum + (i.payment?.workshop_earnings || 0), 0);
+    return this.stats?.total_earnings_usd || 0;
+  }
+
+  getIncidentStatusEntries(): Array<{ status: string; count: number }> {
+    if (!this.stats?.incidents_by_status) {
+      return [];
+    }
+
+    return Object.entries(this.stats.incidents_by_status)
+      .map(([status, count]) => ({ status, count: count || 0 }))
+      .sort((a, b) => a.status.localeCompare(b.status));
+  }
+
+  formatMinutes(value?: number | null): string {
+    const minutes = value || 0;
+    if (!minutes || Number.isNaN(minutes)) {
+      return '0 min';
+    }
+    return `${minutes.toFixed(1)} min`;
   }
 
   // Get technician stats for progress bars

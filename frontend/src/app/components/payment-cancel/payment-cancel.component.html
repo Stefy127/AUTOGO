@@ -1,13 +1,61 @@
-﻿<div class="stripe-return-page cancel-page">
-  <main class="return-card">
-    <div class="status-icon cancel-icon">!</div>
-    <p class="eyebrow">Stripe Checkout</p>
-    <h1>Pago cancelado</h1>
-    <p class="message">El proceso de pago fue cancelado o no se complet&oacute;.</p>
-    <p class="helper">Puedes volver a la aplicaci&oacute;n AUTOGO e intentarlo nuevamente.</p>
+﻿<div class="stripe-return-page cancel-page" [class.payment-flow]="paymentId > 0">
+  <main class="return-card" *ngIf="paymentId > 0; else stripeCancelMessage">
+    <div class="status-icon cancel-icon">QR</div>
+    <p class="eyebrow">Pago por cancelación</p>
+    <h1>Confirma tu pago</h1>
+    <p class="message">Ingresa tu referencia y, si quieres, adjunta el comprobante para enviar la verificación al taller.</p>
+
+    <div class="payment-summary">
+      <div><strong>Incidente:</strong> #{{ incidentId }}</div>
+      <div><strong>Monto:</strong> USD {{ amountUsd | number:'1.2-2' }} <span *ngIf="amountBob > 0">| Bs {{ amountBob | number:'1.2-2' }}</span></div>
+      <div><strong>Tipo:</strong> {{ paymentType }}</div>
+      <div><strong>Estado:</strong> {{ paymentStatus }}</div>
+    </div>
+
+    <div class="qr-box" *ngIf="qrImageUrl">
+      <img [src]="qrImageUrl" alt="QR de cancelación" />
+    </div>
+
+    <div class="form-field">
+      <label>Referencia del pago</label>
+      <input type="text" [(ngModel)]="referenceNumber" placeholder="Ej: 123456789" />
+    </div>
+
+    <div class="form-field">
+      <label>Comprobante opcional</label>
+      <input type="file" accept="image/*" (change)="onProofSelected($event)" />
+    </div>
+
+    <div class="proof-preview" *ngIf="proofPreviewUrl">
+      <div class="proof-preview-header">
+        <strong>Comprobante seleccionado</strong>
+        <button type="button" class="link-button" (click)="clearProof()">Quitar</button>
+      </div>
+      <img [src]="proofPreviewUrl" alt="Vista previa del comprobante" />
+    </div>
+
+    <div class="alert error" *ngIf="error">{{ error }}</div>
+    <div class="alert success" *ngIf="successMessage">{{ successMessage }}</div>
 
     <div class="actions">
-      <a routerLink="/login" class="primary-link">Ir al inicio</a>
+      <button class="primary-link" (click)="confirmPayment()" [disabled]="loading">
+        {{ loading ? 'Enviando...' : 'Ya realicé mi pago' }}
+      </button>
+      <button class="secondary-link" (click)="backToLogin()">Volver</button>
     </div>
   </main>
+
+  <ng-template #stripeCancelMessage>
+    <main class="return-card">
+      <div class="status-icon cancel-icon">!</div>
+      <p class="eyebrow">Stripe Checkout</p>
+      <h1>Pago cancelado</h1>
+      <p class="message">El proceso de pago fue cancelado o no se completó.</p>
+      <p class="helper">Puedes volver a la aplicación AUTOGO e intentarlo nuevamente.</p>
+
+      <div class="actions">
+        <a routerLink="/login" class="primary-link">Ir al inicio</a>
+      </div>
+    </main>
+  </ng-template>
 </div>

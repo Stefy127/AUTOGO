@@ -251,6 +251,10 @@
   gap: 20px;
 }
 
+.kpis-grid-admin {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
 .kpi-card {
   background: white;
   padding: 24px;
@@ -306,6 +310,25 @@
 
 .incidents-section .section-title {
   margin-bottom: 20px;
+}
+
+.status-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.status-table th,
+.status-table td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.status-table th {
+  color: #475569;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 /* Responsive */

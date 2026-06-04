@@ -18,6 +18,7 @@ import {
   TenantWorkshopUpdateRequest,
   TenantWorkshopUserRow,
   TenantWorkshopWithOwnerCreateRequest,
+  AdminStats,
   User,
   Workshop
 } from '../models/models';
@@ -239,8 +240,17 @@ export class AdminService {
   }
 
   // Statistics
-  getPlatformStats(): Observable<any> {
-    return this.http.get(`${this.apiUrl}/stats`, { headers: this.getHeaders() });
+  getPlatformStats(filters?: {
+    start_date?: string;
+    end_date?: string;
+    workshop_id?: number;
+  }): Observable<AdminStats> {
+    let params = new HttpParams();
+    if (filters?.start_date) params = params.set('start_date', filters.start_date);
+    if (filters?.end_date) params = params.set('end_date', filters.end_date);
+    if (filters?.workshop_id !== undefined) params = params.set('workshop_id', String(filters.workshop_id));
+
+    return this.http.get<AdminStats>(`${this.apiUrl}/stats`, { headers: this.getHeaders(), params });
   }
 
   // Users Management
