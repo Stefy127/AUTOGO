@@ -6,14 +6,14 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models import (
-    User, Workshop, Incident, Payment, IncidentHistory, Technician,
+    User, Workshop, Incident, Payment, IncidentHistory, Technician, Offer,
     UserRole, IncidentStatus, IncidentPriority
 )
 from app.schemas import (
     WorkshopResponse, IncidentResponse, PaymentResponse, IncidentHistoryResponse,
     AdminUserUpdate, AdminWorkshopUserResponse, AdminWorkshopUserCreate, AdminUserStatusUpdate,
     AdminTechnicianUpdate, AdminTechnicianStatusUpdate, TechnicianResponse,
-    WorkshopCreate, WorkshopUpdate
+    WorkshopCreate, WorkshopUpdate, AdminStatsResponse
 )
 from app.auth import get_current_user
 from app.auth import get_password_hash
@@ -30,6 +30,32 @@ def verify_admin(current_user: User):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo administradores pueden acceder a este recurso"
         )
+
+
+def _parse_date_range(start_date: str | None, end_date: str | None) -> tuple[datetime | None, datetime | None]:
+    parsed_start: datetime | None = None
+    parsed_end_exclusive: datetime | None = None
+
+    try:
+        if start_date:
+            parsed_start = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            parsed_end_exclusive = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato de fecha inválido. Usa YYYY-MM-DD"
+        )
+
+    return parsed_start, parsed_end_exclusive
+
+
+def _to_arrival_minutes(raw_value: int | None) -> float | None:
+    if raw_value is None:
+        return None
+    if raw_value > 200:
+        return raw_value / 60.0
+    return float(raw_value)
 
 
 # ==================== WORKSHOPS MANAGEMENT ====================
@@ -566,8 +592,11 @@ async def get_commissions_report(
 
 # ==================== STATISTICS ====================
 
-@router.get("/stats")
+@router.get("/stats", response_model=AdminStatsResponse)
 async def get_platform_stats(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    workshop_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -577,101 +606,181 @@ async def get_platform_stats(
     """
     verify_admin(current_user)
     
-    # Contar usuarios por rol
+    parsed_start, parsed_end_exclusive = _parse_date_range(start_date, end_date)
+
+    incidents_query = db.query(Incident)
+    if workshop_id is not None:
+        incidents_query = incidents_query.filter(Incident.workshop_id == workshop_id)
+    if parsed_start is not None:
+        incidents_query = incidents_query.filter(Incident.created_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        incidents_query = incidents_query.filter(Incident.created_at < parsed_end_exclusive)
+    incidents = incidents_query.all()
+
+    offers_query = db.query(Offer)
+    if workshop_id is not None:
+        offers_query = offers_query.filter(Offer.workshop_id == workshop_id)
+    if parsed_start is not None:
+        offers_query = offers_query.filter(Offer.created_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        offers_query = offers_query.filter(Offer.created_at < parsed_end_exclusive)
+    offers = offers_query.all()
+
+    payments_query = db.query(Payment)
+    if workshop_id is not None:
+        payments_query = payments_query.join(Incident, Payment.incident_id == Incident.id).filter(Incident.workshop_id == workshop_id)
+    if parsed_start is not None:
+        payments_query = payments_query.filter(Payment.created_at >= parsed_start)
+    if parsed_end_exclusive is not None:
+        payments_query = payments_query.filter(Payment.created_at < parsed_end_exclusive)
+    payments = payments_query.all()
+
+    incidents_by_status = {status.value: 0 for status in IncidentStatus}
+    for incident in incidents:
+        incidents_by_status[incident.status.value] = incidents_by_status.get(incident.status.value, 0) + 1
+
+    total_incidents = len(incidents)
+    completed_incidents = sum(1 for i in incidents if i.status == IncidentStatus.COMPLETED)
+    cancelled_incidents = sum(1 for i in incidents if i.status == IncidentStatus.CANCELLED)
+    active_incidents = sum(1 for i in incidents if i.status not in [IncidentStatus.COMPLETED, IncidentStatus.CANCELLED])
+
+    if workshop_id is not None:
+        workshop = db.query(Workshop).filter(Workshop.id == workshop_id).first()
+        total_workshops = 1 if workshop else 0
+        active_workshops = 1 if workshop and workshop.is_active else 0
+        inactive_workshops = 1 if workshop and not workshop.is_active else 0
+    else:
+        total_workshops = db.query(Workshop).count()
+        active_workshops = db.query(Workshop).filter(Workshop.is_active == True).count()
+        inactive_workshops = max(total_workshops - active_workshops, 0)
+
+    technicians_query = db.query(Technician)
+    if workshop_id is not None:
+        technicians_query = technicians_query.filter(Technician.workshop_id == workshop_id)
+    technicians_rows = technicians_query.all()
+    total_technicians = len(technicians_rows)
+    available_technicians = sum(1 for t in technicians_rows if t.is_available)
+    busy_technicians = max(total_technicians - available_technicians, 0)
+
+    total_offers = len(offers)
+    accepted_offers = sum(1 for o in offers if o.status.value == "accepted")
+    rejected_offers = sum(1 for o in offers if o.status.value == "rejected")
+    pending_offers = sum(1 for o in offers if o.status.value == "pending")
+
+    paid_payments = sum(1 for p in payments if p.is_paid or (p.payment_status or "").lower() == "paid")
+    pending_payments = sum(1 for p in payments if (not p.is_paid) or (p.payment_status or "").lower() == "pending")
+    pending_verification_payments = sum(
+        1 for p in payments if (p.payment_status or "").lower() == "pending_verification"
+    )
+    cancellation_payments_pending = sum(
+        1
+        for p in payments
+        if (p.payment_type or "").lower() in ["cancellation_on_route", "cancellation_in_service"]
+        and (p.payment_status or "").lower() in ["pending", "pending_verification"]
+    )
+
+    paid_payments_rows = [
+        p for p in payments
+        if p.is_paid or (p.payment_status or "").lower() == "paid"
+    ]
+    total_revenue_usd = float(sum(float(p.amount or 0) for p in paid_payments_rows))
+    total_revenue_bob = float(sum(float(p.amount_bob or 0) for p in paid_payments_rows if p.amount_bob is not None))
+    platform_commission_usd = float(sum(float(p.commission_amount or 0) for p in paid_payments_rows))
+    workshop_earnings_usd = float(sum(float(p.workshop_earnings or 0) for p in paid_payments_rows))
+
+    assignment_minutes_values = [
+        (i.accepted_at - i.created_at).total_seconds() / 60.0
+        for i in incidents
+        if i.accepted_at is not None
+    ]
+    average_assignment_time_minutes = (
+        round(sum(assignment_minutes_values) / len(assignment_minutes_values), 2)
+        if assignment_minutes_values else 0.0
+    )
+
+    arrival_minutes_values = [
+        _to_arrival_minutes(i.estimated_arrival_time)
+        for i in incidents
+        if _to_arrival_minutes(i.estimated_arrival_time) is not None
+    ]
+    average_arrival_time_minutes = (
+        round(sum(arrival_minutes_values) / len(arrival_minutes_values), 2)
+        if arrival_minutes_values else 0.0
+    )
+
+    service_minutes_values = [
+        (i.completed_at - i.started_at).total_seconds() / 60.0
+        for i in incidents
+        if i.started_at is not None and i.completed_at is not None
+    ]
+    average_service_time_minutes = (
+        round(sum(service_minutes_values) / len(service_minutes_values), 2)
+        if service_minutes_values else 0.0
+    )
+
     total_users = db.query(User).count()
     clients = db.query(User).filter(User.role == UserRole.CLIENT).count()
-    workshops = db.query(User).filter(User.role == UserRole.WORKSHOP).count()
-    technicians = db.query(User).filter(User.role == UserRole.TECHNICIAN).count()
+    workshop_users = db.query(User).filter(User.role == UserRole.WORKSHOP).count()
+    technician_users = db.query(User).filter(User.role == UserRole.TECHNICIAN).count()
     admins = db.query(User).filter(User.role == UserRole.ADMIN).count()
-    
-    # Contar talleres
-    total_workshops = db.query(Workshop).count()
-    active_workshops = db.query(Workshop).filter(Workshop.is_active == True).count()
-    
-    # Contar técnicos
-    total_technicians = db.query(Technician).count()
-    available_technicians = db.query(Technician).filter(Technician.is_available == True).count()
-    
-    # Contar incidentes por estado
-    total_incidents = db.query(Incident).count()
-    pending_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.PENDING).count()
-    accepted_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.ACCEPTED).count()
-    in_progress_incidents = db.query(Incident).filter(
-        Incident.status.in_([
-            IncidentStatus.ON_ROUTE,
-            IncidentStatus.IN_SERVICE,
-            IncidentStatus.IN_PROGRESS,
-        ])
-    ).count()
-    completed_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.COMPLETED).count()
-    cancelled_incidents = db.query(Incident).filter(Incident.status == IncidentStatus.CANCELLED).count()
-    
-    # Contar incidentes por prioridad
-    high_priority = db.query(Incident).filter(Incident.priority == IncidentPriority.HIGH).count()
-    medium_priority = db.query(Incident).filter(Incident.priority == IncidentPriority.MEDIUM).count()
-    low_priority = db.query(Incident).filter(Incident.priority == IncidentPriority.LOW).count()
-    
-    # Estadísticas de pagos
-    total_payments = db.query(Payment).count()
-    paid_payments = db.query(Payment).filter(Payment.is_paid == True).count()
-    pending_payments = db.query(Payment).filter(Payment.is_paid == False).count()
-    
-    # Calcular totales de dinero
-    total_revenue = db.query(func.sum(Payment.amount)).scalar() or 0
-    total_commissions = db.query(func.sum(Payment.commission_amount)).scalar() or 0
-    total_workshop_earnings = db.query(func.sum(Payment.workshop_earnings)).scalar() or 0
-    
-    # Estadísticas de los últimos 30 días
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_incidents = db.query(Incident).filter(Incident.created_at >= thirty_days_ago).count()
-    recent_payments = db.query(Payment).filter(Payment.created_at >= thirty_days_ago).count()
-    recent_users = db.query(User).filter(User.created_at >= thirty_days_ago).count()
-    
-    return {
-        "users": {
+
+    return AdminStatsResponse(
+        total_incidents=total_incidents,
+        active_incidents=active_incidents,
+        completed_incidents=completed_incidents,
+        cancelled_incidents=cancelled_incidents,
+        incidents_by_status=incidents_by_status,
+        total_workshops=total_workshops,
+        active_workshops=active_workshops,
+        inactive_workshops=inactive_workshops,
+        total_technicians=total_technicians,
+        available_technicians=available_technicians,
+        busy_technicians=busy_technicians,
+        total_offers=total_offers,
+        accepted_offers=accepted_offers,
+        rejected_offers=rejected_offers,
+        pending_offers=pending_offers,
+        paid_payments=paid_payments,
+        pending_payments=pending_payments,
+        pending_verification_payments=pending_verification_payments,
+        cancellation_payments_pending=cancellation_payments_pending,
+        total_revenue_usd=total_revenue_usd,
+        total_revenue_bob=total_revenue_bob,
+        platform_commission_usd=platform_commission_usd,
+        workshop_earnings_usd=workshop_earnings_usd,
+        average_assignment_time_minutes=average_assignment_time_minutes,
+        average_arrival_time_minutes=average_arrival_time_minutes,
+        average_service_time_minutes=average_service_time_minutes,
+        users={
             "total": total_users,
             "clients": clients,
-            "workshops": workshops,
-            "technicians": technicians,
+            "workshops": workshop_users,
+            "technicians": technician_users,
             "admins": admins,
-            "recent_30_days": recent_users
         },
-        "workshops": {
+        workshops={
             "total": total_workshops,
             "active": active_workshops,
-            "inactive": total_workshops - active_workshops
+            "inactive": inactive_workshops,
         },
-        "technicians": {
+        technicians={
             "total": total_technicians,
             "available": available_technicians,
-            "busy": total_technicians - available_technicians
+            "busy": busy_technicians,
         },
-        "incidents": {
+        incidents={
             "total": total_incidents,
-            "by_status": {
-                "pending": pending_incidents,
-                "accepted": accepted_incidents,
-                "in_progress": in_progress_incidents,
-                "completed": completed_incidents,
-                "cancelled": cancelled_incidents
-            },
-            "by_priority": {
-                "high": high_priority,
-                "medium": medium_priority,
-                "low": low_priority
-            },
-            "recent_30_days": recent_incidents
+            "by_status": incidents_by_status,
         },
-        "payments": {
-            "total": total_payments,
+        payments={
             "paid": paid_payments,
             "pending": pending_payments,
-            "total_revenue": float(total_revenue),
-            "total_commissions": float(total_commissions),
-            "total_workshop_earnings": float(total_workshop_earnings),
-            "recent_30_days": recent_payments
-        }
-    }
+            "pending_verification": pending_verification_payments,
+            "total_revenue": total_revenue_usd,
+            "total_commissions": platform_commission_usd,
+            "total_workshop_earnings": workshop_earnings_usd,
+        },
+    )
 
 
 # ==================== USERS MANAGEMENT ====================

@@ -318,11 +318,9 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                   imageQuality: 85,
                 );
                 if (image == null) return;
-
-                final bytes = await image.readAsBytes();
                 setDialogState(() {
                   _selectedCancellationProof = image;
-                  _selectedCancellationProofBytes = bytes;
+                  _selectedCancellationProofBytes = null;
                 });
               } catch (e) {
                 if (!dialogContext.mounted) return;
@@ -334,7 +332,7 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
 
             Future<void> submitPayment() async {
               if (paymentId == null) return;
-              if (_selectedCancellationProofBytes == null) {
+              if (_selectedCancellationProof == null) {
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(content: Text('Adjunta un comprobante de pago')),
                 );
@@ -345,11 +343,12 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
               try {
                 final authService = Provider.of<AuthService>(context, listen: false);
                 final apiService = Provider.of<ApiService>(context, listen: false);
+                final proofBytes = await _selectedCancellationProof!.readAsBytes();
                 final mimeType = _selectedCancellationProof?.name.toLowerCase().endsWith('.png') == true
                     ? 'image/png'
                     : 'image/jpeg';
                 final proofDataUrl =
-                    'data:$mimeType;base64,${base64Encode(_selectedCancellationProofBytes!)}';
+                  'data:$mimeType;base64,${base64Encode(proofBytes)}';
                 final referenceNumber =
                     'AG-CANCEL-${data['incident_id'] ?? paymentId}-${DateTime.now().millisecondsSinceEpoch}';
 
@@ -380,6 +379,11 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
             }
 
             return AlertDialog(
+              backgroundColor: const Color(0xFFFFFBF7),
+              surfaceTintColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
               title: const Text('Pago por cancelacion'),
               content: SingleChildScrollView(
                 child: Column(
@@ -405,21 +409,32 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                       icon: const Icon(Icons.upload_file),
                       label: const Text('Adjuntar comprobante'),
                     ),
-                    if (_selectedCancellationProofBytes != null) ...[
+                    if (_selectedCancellationProof != null) ...[
                       const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          _selectedCancellationProofBytes!,
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.contain,
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF93C5FD)),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _selectedCancellationProof?.name ?? 'Comprobante adjuntado',
-                        style: TextStyle(color: Colors.grey.shade700),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.attachment, color: Color(0xFF2563EB)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _selectedCancellationProof?.name ?? 'Comprobante adjuntado',
+                                style: const TextStyle(
+                                  color: Color(0xFF1E3A8A),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ] else ...[
                       const SizedBox(height: 8),
@@ -432,17 +447,28 @@ class _EmergencyListScreenState extends State<EmergencyListScreen> {
                 ),
               ),
               actions: [
-                ElevatedButton(
-                  onPressed: _sendingCancellationProof || _selectedCancellationProofBytes == null
-                    ? null
-                    : submitPayment,
-                  child: _sendingCancellationProof
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Ya realice el pago'),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: const Color(0xFF0F766E),
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _sendingCancellationProof || _selectedCancellationProof == null
+                      ? null
+                      : submitPayment,
+                    child: _sendingCancellationProof
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text('Ya realice el pago'),
+                  ),
                 ),
               ],
             );

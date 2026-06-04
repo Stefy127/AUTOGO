@@ -83,7 +83,7 @@
       <!-- KPIs Section -->
       <div class="kpis-section">
         <h3 class="section-title">Estadísticas en Tiempo Real</h3>
-        <div class="kpis-grid">
+        <div class="kpis-grid" *ngIf="!isAdmin()">
           <!-- Total Emergencias -->
           <div class="kpi-card">
             <div class="kpi-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
@@ -128,6 +128,52 @@
             </div>
           </div>
         </div>
+
+        <div class="kpis-grid kpis-grid-admin" *ngIf="isAdmin() && adminStats">
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Total Incidentes</div><div class="kpi-value">{{ adminStats.total_incidents }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Incidentes Activos</div><div class="kpi-value">{{ adminStats.active_incidents }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Incidentes Finalizados</div><div class="kpi-value">{{ adminStats.completed_incidents }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Incidentes Cancelados</div><div class="kpi-value">{{ adminStats.cancelled_incidents }}</div></div></div>
+
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Talleres Activos</div><div class="kpi-value">{{ adminStats.active_workshops }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Talleres Inactivos</div><div class="kpi-value">{{ adminStats.inactive_workshops }}</div></div></div>
+
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Tecnicos Disponibles</div><div class="kpi-value">{{ adminStats.available_technicians }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Tecnicos Ocupados</div><div class="kpi-value">{{ adminStats.busy_technicians }}</div></div></div>
+
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Ofertas Aceptadas</div><div class="kpi-value">{{ adminStats.accepted_offers }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Ofertas Pendientes</div><div class="kpi-value">{{ adminStats.pending_offers }}</div></div></div>
+
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Pagos Pendientes</div><div class="kpi-value">{{ adminStats.pending_payments }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Pagos Pend. Verificacion</div><div class="kpi-value">{{ adminStats.pending_verification_payments }}</div></div></div>
+
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Ingresos Totales USD</div><div class="kpi-value">${{ adminStats.total_revenue_usd.toFixed(2) }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Ingresos Totales Bs</div><div class="kpi-value">Bs {{ adminStats.total_revenue_bob.toFixed(2) }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Comision Plataforma</div><div class="kpi-value">${{ adminStats.platform_commission_usd.toFixed(2) }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Ganancia Talleres</div><div class="kpi-value">${{ adminStats.workshop_earnings_usd.toFixed(2) }}</div></div></div>
+
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Prom. Asignacion</div><div class="kpi-value">{{ formatMinutes(adminStats.average_assignment_time_minutes) }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Prom. Llegada</div><div class="kpi-value">{{ formatMinutes(adminStats.average_arrival_time_minutes) }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Prom. Atencion</div><div class="kpi-value">{{ formatMinutes(adminStats.average_service_time_minutes) }}</div></div></div>
+        </div>
+      </div>
+
+      <div class="incidents-section" *ngIf="isAdmin() && adminStats">
+        <h3 class="section-title">Incidentes por Estado</h3>
+        <table class="status-table">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of getAdminIncidentStatusEntries()">
+              <td>{{ getStatusText(row.status) }}</td>
+              <td>{{ row.count }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Incidents List -->

@@ -177,9 +177,24 @@ export class WorkshopService {
   // ==================== STATS ====================
 
   getMyStats(): Observable<WorkshopStats> {
+    return this.getMyStatsWithFilters();
+  }
+
+  getMyStatsWithFilters(filters?: {
+    startDate?: string;
+    endDate?: string;
+  }): Observable<WorkshopStats> {
+    let params = new HttpParams();
+    if (filters?.startDate) {
+      params = params.set('start_date', filters.startDate);
+    }
+    if (filters?.endDate) {
+      params = params.set('end_date', filters.endDate);
+    }
+
     return this.http.get<WorkshopStats>(
       `${this.apiUrl}/workshops/me/stats`,
-      { headers: this.getHeaders() }
+      { headers: this.getHeaders(), params }
     );
   }
 

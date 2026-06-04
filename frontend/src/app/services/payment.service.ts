@@ -86,6 +86,25 @@ export class PaymentService {
     );
   }
 
+  confirmCancellationQrPayment(id: number, referenceNumber: string, proofImageUrl?: string): Observable<{
+    payment_id: number;
+    payment_status: string;
+    message: string;
+  }> {
+    return this.http.post<{
+      payment_id: number;
+      payment_status: string;
+      message: string;
+    }>(
+      `${this.apiUrl}/${id}/confirm-qr-payment`,
+      {
+        reference_number: referenceNumber,
+        proof_image_url: proofImageUrl || undefined
+      },
+      { headers: this.getHeaders() }
+    );
+  }
+
   verifyCancellationQrPayment(id: number, approved: boolean, notes?: string): Observable<{
     payment_id: number;
     payment_status: string;

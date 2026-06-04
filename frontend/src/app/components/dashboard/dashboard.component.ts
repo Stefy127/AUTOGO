@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { IncidentService } from '../../services/incident.service';
-import { User, Incident } from '../../models/models';
+import { AdminService } from '../../services/admin.service';
+import { User, Incident, AdminStats } from '../../models/models';
 
 interface DashboardStats {
   total: number;
@@ -19,6 +20,7 @@ interface DashboardStats {
 })
 export class DashboardComponent implements OnInit {
   currentUser: User | null = null;
+  adminStats: AdminStats | null = null;
   stats: DashboardStats = {
     total: 0,
     pending: 0,
@@ -31,6 +33,7 @@ export class DashboardComponent implements OnInit {
   constructor(
     private authService: AuthService,
     private incidentService: IncidentService,
+    private adminService: AdminService,
     private router: Router
   ) {}
 
@@ -44,8 +47,26 @@ export class DashboardComponent implements OnInit {
   }
 
   loadStats(): void {
+    if (this.isAdmin()) {
+      this.adminService.getPlatformStats().subscribe({
+        next: (stats) => {
+          this.adminStats = stats;
+          this.stats.total = stats.total_incidents;
+          this.stats.pending = stats.incidents_by_status?.['pending'] || 0;
+          this.stats.inProgress = stats.active_incidents;
+          this.stats.resolved = stats.completed_incidents;
+          this.stats.cancelled = stats.cancelled_incidents;
+        },
+        error: (error) => {
+          console.error('Error loading admin stats:', error);
+        }
+      });
+      return;
+    }
+
     this.incidentService.getIncidents().subscribe({
       next: (incidents: Incident[]) => {
+        this.adminStats = null;
         this.stats.total = incidents.length;
         this.stats.pending = incidents.filter(i => i.status === 'pending').length;
         this.stats.inProgress = incidents.filter(i => i.status === 'in_progress').length;
@@ -56,6 +77,39 @@ export class DashboardComponent implements OnInit {
         console.error('Error loading stats:', error);
       }
     });
+  }
+
+  getAdminIncidentStatusEntries(): Array<{ status: string; count: number }> {
+    if (!this.adminStats?.incidents_by_status) {
+      return [];
+    }
+
+    return Object.entries(this.adminStats.incidents_by_status)
+      .map(([status, count]) => ({ status, count: count || 0 }))
+      .sort((a, b) => a.status.localeCompare(b.status));
+  }
+
+  getStatusText(status: string): string {
+    const statusMap: { [key: string]: string } = {
+      pending: 'Pendiente',
+      waiting_offers: 'Esperando Ofertas',
+      assigned: 'Asignada',
+      accepted: 'Aceptada',
+      on_route: 'En Camino',
+      in_service: 'En Servicio',
+      in_progress: 'En Proceso',
+      completed: 'Completada',
+      cancelled: 'Cancelada'
+    };
+    return statusMap[status] || status;
+  }
+
+  formatMinutes(value?: number | null): string {
+    const minutes = value || 0;
+    if (!minutes || Number.isNaN(minutes)) {
+      return '0 min';
+    }
+    return `${minutes.toFixed(1)} min`;
   }
 
   toggleSidebar(): void {

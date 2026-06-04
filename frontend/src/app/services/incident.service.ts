@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Incident, IncidentHistory } from '../models/models';
+import { Incident, IncidentCancelResponse, IncidentHistory } from '../models/models';
 
 @Injectable({
   providedIn: 'root'
@@ -33,8 +33,8 @@ export class IncidentService {
     return this.http.get<IncidentHistory[]>(`${this.apiUrl}/${id}/history`);
   }
 
-  cancelIncident(id: number, reason?: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/${id}/cancel`, { reason });
+  cancelIncident(id: number, reason?: string): Observable<IncidentCancelResponse> {
+    return this.http.post<IncidentCancelResponse>(`${this.apiUrl}/${id}/cancel`, { reason });
   }
 
   completeIncident(id: number): Observable<Incident> {

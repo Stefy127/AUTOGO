@@ -532,6 +532,24 @@ class _IncidentTrackingScreenState extends State<IncidentTrackingScreen> {
           if (type == 'status_update') {
             final newStatus = data['status']?.toString() ?? _status;
             _status = newStatus;
+            final etaSeconds = (data['estimated_arrival_time'] as num?)?.toInt();
+            if (etaSeconds != null) {
+              _estimatedArrivalTime =
+                  DateTime.now().add(Duration(seconds: etaSeconds));
+            }
+            _remainingDistanceMeters =
+                (data['remaining_distance_meters'] as num?)?.toInt() ??
+                    _remainingDistanceMeters;
+            final incomingRoutePolyline = data['route_polyline']?.toString();
+            if (incomingRoutePolyline != null && incomingRoutePolyline.isNotEmpty) {
+              _fullRoutePolyline = incomingRoutePolyline;
+              _routePolyline = incomingRoutePolyline;
+            }
+            final newLat = (data['latitude'] as num?)?.toDouble();
+            final newLng = (data['longitude'] as num?)?.toDouble();
+            if (newLat != null && newLng != null) {
+              _animateTo(newLat, newLng);
+            }
             if (!_isTrackingActive) {
               _socket?.close();
               _socket = null;

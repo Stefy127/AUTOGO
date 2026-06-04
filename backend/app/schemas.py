@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, Any
 from datetime import datetime, date
 from enum import Enum
 
@@ -603,6 +603,105 @@ class PaymentStatusResponse(BaseModel):
     currency: Optional[str] = None
     commission_amount: float
     workshop_earnings: float
+
+
+class IncidentsByStatusItem(BaseModel):
+    status: IncidentStatus
+    count: int
+
+
+class OfferStatsResponse(BaseModel):
+    offers_sent: int = 0
+    offers_accepted: int = 0
+    offers_rejected: int = 0
+    offers_pending: int = 0
+
+
+class TechnicianStatsResponse(BaseModel):
+    technicians_total: int = 0
+    technicians_available: int = 0
+    technicians_busy: int = 0
+
+
+class PaymentStatsResponse(BaseModel):
+    paid_payments: int = 0
+    pending_payments: int = 0
+    pending_verification_payments: int = 0
+    cancellation_payments_pending: int = 0
+
+
+class WorkshopStatsResponse(BaseModel):
+    workshop_id: int
+    workshop_name: str
+    total_incidents: int = 0
+    active_incidents: int = 0
+    completed_incidents: int = 0
+    cancelled_incidents: int = 0
+    incidents_by_status: dict[str, int] = Field(default_factory=dict)
+    offers_sent: int = 0
+    offers_accepted: int = 0
+    offers_rejected: int = 0
+    offers_pending: int = 0
+    technicians_total: int = 0
+    technicians_available: int = 0
+    technicians_busy: int = 0
+    paid_payments: int = 0
+    pending_payments: int = 0
+    pending_verification_payments: int = 0
+    cancellation_payments_pending: int = 0
+    total_earnings_usd: float = 0.0
+    total_earnings_bob: float = 0.0
+    platform_commission_usd: float = 0.0
+    average_arrival_time_minutes: float = 0.0
+    average_service_time_minutes: float = 0.0
+
+    # Backward compatibility keys
+    accepted_incidents: int = 0
+    in_progress_incidents: int = 0
+    total_technicians: int = 0
+    available_technicians: int = 0
+
+
+class AdminStatsResponse(BaseModel):
+    total_incidents: int = 0
+    active_incidents: int = 0
+    completed_incidents: int = 0
+    cancelled_incidents: int = 0
+    incidents_by_status: dict[str, int] = Field(default_factory=dict)
+
+    total_workshops: int = 0
+    active_workshops: int = 0
+    inactive_workshops: int = 0
+
+    total_technicians: int = 0
+    available_technicians: int = 0
+    busy_technicians: int = 0
+
+    total_offers: int = 0
+    accepted_offers: int = 0
+    rejected_offers: int = 0
+    pending_offers: int = 0
+
+    paid_payments: int = 0
+    pending_payments: int = 0
+    pending_verification_payments: int = 0
+    cancellation_payments_pending: int = 0
+
+    total_revenue_usd: float = 0.0
+    total_revenue_bob: float = 0.0
+    platform_commission_usd: float = 0.0
+    workshop_earnings_usd: float = 0.0
+
+    average_assignment_time_minutes: float = 0.0
+    average_arrival_time_minutes: float = 0.0
+    average_service_time_minutes: float = 0.0
+
+    # Backward compatibility keys
+    users: Optional[dict[str, Any]] = None
+    workshops: Optional[dict[str, Any]] = None
+    technicians: Optional[dict[str, Any]] = None
+    incidents: Optional[dict[str, Any]] = None
+    payments: Optional[dict[str, Any]] = None
 
 
 class OperationalReportRequest(BaseModel):

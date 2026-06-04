@@ -274,6 +274,23 @@ export interface CancellationPaymentPending {
   created_at: string;
 }
 
+export interface IncidentCancelResponse {
+  incident_id: number;
+  status: Incident['status'];
+  requires_payment: boolean;
+  message: string;
+  payment_id?: number;
+  payment_type?: string;
+  payment_status?: string;
+  cancellation_percentage?: number;
+  original_offer_amount_usd?: number;
+  penalty_amount_usd?: number;
+  exchange_rate_usd_to_bob?: number;
+  penalty_amount_bob?: number;
+  payment_method?: Payment['payment_method'];
+  qr_image_url?: string;
+}
+
 export interface WorkshopPaymentQr {
   workshop_id: number;
   qr_image_url: string;
@@ -284,11 +301,67 @@ export interface WorkshopStats {
   workshop_id: number;
   workshop_name: string;
   total_incidents: number;
+  active_incidents: number;
   accepted_incidents: number;
   in_progress_incidents: number;
   completed_incidents: number;
+  cancelled_incidents: number;
+  incidents_by_status: Record<string, number>;
+  offers_sent: number;
+  offers_accepted: number;
+  offers_rejected: number;
+  offers_pending: number;
+  technicians_total: number;
+  technicians_available: number;
+  technicians_busy: number;
+  paid_payments: number;
+  pending_payments: number;
+  pending_verification_payments: number;
+  cancellation_payments_pending: number;
+  total_earnings_usd: number;
+  total_earnings_bob: number;
+  platform_commission_usd: number;
+  average_arrival_time_minutes: number;
+  average_service_time_minutes: number;
+
+  // Backward compatibility keys
   total_technicians: number;
   available_technicians: number;
+}
+
+export interface AdminStats {
+  total_incidents: number;
+  active_incidents: number;
+  completed_incidents: number;
+  cancelled_incidents: number;
+  incidents_by_status: Record<string, number>;
+
+  total_workshops: number;
+  active_workshops: number;
+  inactive_workshops: number;
+
+  total_technicians: number;
+  available_technicians: number;
+  busy_technicians: number;
+
+  total_offers: number;
+  accepted_offers: number;
+  rejected_offers: number;
+  pending_offers: number;
+
+  paid_payments: number;
+  pending_payments: number;
+  pending_verification_payments: number;
+  cancellation_payments_pending: number;
+
+  total_revenue_usd: number;
+  total_revenue_bob: number;
+  platform_commission_usd: number;
+  workshop_earnings_usd: number;
+
+  average_assignment_time_minutes: number;
+  average_arrival_time_minutes: number;
+  average_service_time_minutes: number;
 }
 
 export interface AppNotification {
