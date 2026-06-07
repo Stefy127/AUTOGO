@@ -205,8 +205,7 @@ async def create_incident(
     # Create incident
     db_incident = models.Incident(**incident_data)
     db.add(db_incident)
-    db.commit()
-    db.refresh(db_incident)
+    db.flush()
     
     # Create history entry
     history = models.IncidentHistory(
@@ -216,6 +215,21 @@ async def create_incident(
         notes="Incidente creado"
     )
     db.add(history)
+    compatible_workshops = db.query(models.Workshop).filter(
+        models.Workshop.is_active == True,
+        models.Workshop.categories.overlap(db_incident.categories),
+    ).all()
+
+    for workshop in compatible_workshops:
+        create_notification(
+            db,
+            user_id=workshop.owner_id,
+            incident_id=db_incident.id,
+            title="Nueva emergencia compatible con tus categorías de servicio",
+            message="Nueva emergencia compatible con tus categorías de servicio.",
+            notification_type="incident_compatible",
+        )
+
     db.commit()
     
     # Load relationships for response
@@ -319,6 +333,7 @@ def offline_sync_incident(
         location_text=address,
         latitude=payload.latitude,
         longitude=payload.longitude,
+        categories=payload.categories,
         client_offline_id=client_offline_id,
         client_email_offline=payload.client_email,
         created_offline_at=payload.created_offline_at,
@@ -334,6 +349,26 @@ def offline_sync_incident(
         changed_by_user_id=client_user.id,
         notes="Incidente sincronizado desde modo offline"
     ))
+
+    # Notify compatible workshops based on categories (keep same logic as online create)
+    try:
+        compatible_workshops = db.query(models.Workshop).filter(
+            models.Workshop.is_active == True,
+            models.Workshop.categories.overlap(db_incident.categories),
+        ).all()
+
+        for workshop in compatible_workshops:
+            create_notification(
+                db,
+                user_id=workshop.owner_id,
+                incident_id=db_incident.id,
+                title="Nueva emergencia compatible con tus categorías de servicio",
+                message="Nueva emergencia compatible con tus categorías de servicio.",
+                notification_type="incident_compatible",
+            )
+    except Exception:
+        # Don't block offline sync on notification errors; log and continue
+        logger.exception("Error al notificar talleres compatibles tras sincronización offline")
 
     db.commit()
 
@@ -435,7 +470,8 @@ def get_available_incidents_for_workshops(
         models.Incident.status.in_([
             models.IncidentStatus.PENDING,
             models.IncidentStatus.WAITING_OFFERS
-        ])
+        ]),
+        models.Incident.categories.overlap(workshop.categories)
     ).order_by(models.Incident.created_at.desc()).all()
 
     return incidents

@@ -31,6 +31,7 @@ class OfflineEmergencySyncService {
       'vehicle_plate': emergency.vehiclePlate,
       'incident_type': emergency.incidentType,
       'description': emergency.description,
+      'categories': emergency.categories,
       'address': emergency.address,
       'latitude': emergency.latitude,
       'longitude': emergency.longitude,

@@ -9,6 +9,7 @@ from app.auth import get_current_user
 from app import models, schemas
 from app.services.mapbox_service import MapboxService
 from app.services.notification_service import create_notification
+from app.services.service_categories import categories_overlap
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter(prefix="/offers", tags=["offers"])
@@ -49,6 +50,12 @@ async def create_offer(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Incident not found"
+        )
+
+    if not categories_overlap(workshop.categories, incident.categories):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El taller no tiene categorías compatibles con esta emergencia"
         )
 
     if incident.workshop_id is not None or incident.status in [

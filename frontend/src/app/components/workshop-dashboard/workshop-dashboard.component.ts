@@ -4,8 +4,34 @@ import { AuthService } from '../../services/auth.service';
 import { WorkshopService } from '../../services/workshop.service';
 import { IncidentService } from '../../services/incident.service';
 import { PaymentService } from '../../services/payment.service';
-import { Workshop, Technician, Incident, WorkshopStats, AppNotification, CancellationPaymentPending } from '../../models/models';
+import { Workshop, Technician, Incident, WorkshopStats, AppNotification, CancellationPaymentPending, IncidentZoneStat } from '../../models/models';
 import { LocationData } from '../map-picker/map-picker.component';
+
+interface ServiceCategoryOption {
+  value: string;
+  label: string;
+}
+
+const SERVICE_CATEGORY_OPTIONS: ServiceCategoryOption[] = [
+  { value: 'general_mechanics', label: 'Mecánica general' },
+  { value: 'automotive_electricity', label: 'Electricidad automotriz' },
+  { value: 'battery_start', label: 'Batería y arranque' },
+  { value: 'tires', label: 'Llantería / Neumáticos' },
+  { value: 'towing', label: 'Grúa / Remolque' },
+  { value: 'locksmith', label: 'Cerrajería automotriz' },
+  { value: 'fuel', label: 'Combustible' },
+  { value: 'brakes', label: 'Frenos' },
+  { value: 'engine', label: 'Motor' },
+  { value: 'cooling', label: 'Refrigeración' },
+  { value: 'transmission', label: 'Transmisión / Caja' },
+  { value: 'suspension_steering', label: 'Suspensión y dirección' },
+  { value: 'electronic_diagnosis', label: 'Diagnóstico electrónico' },
+  { value: 'body_paint', label: 'Chaperío y pintura' },
+  { value: 'roadside_assistance', label: 'Auxilio rápido en carretera' },
+  { value: 'preventive_maintenance', label: 'Mantenimiento preventivo' },
+  { value: 'air_conditioning', label: 'Aire acondicionado' },
+  { value: 'spare_parts', label: 'Repuestos' },
+];
 
 @Component({
   selector: 'app-workshop-dashboard',
@@ -30,8 +56,11 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     address: '',
     phone: '',
     latitude: undefined as number | undefined,
-    longitude: undefined as number | undefined
+    longitude: undefined as number | undefined,
+    categories: [] as string[]
   };
+
+  serviceCategories = SERVICE_CATEGORY_OPTIONS;
 
   technicianForm = {
     name: '',
@@ -133,7 +162,8 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
           address: workshop.address || '',
           phone: workshop.phone || '',
           latitude: workshop.latitude,
-          longitude: workshop.longitude
+          longitude: workshop.longitude,
+          categories: workshop.categories || []
         };
         this.loadTechnicians();
         this.loadStats();
@@ -152,7 +182,8 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
             address: '',
             phone: '',
             latitude: 19.432608,
-            longitude: -99.133209
+            longitude: -99.133209,
+            categories: []
           };
           this.currentView = 'edit-info';
           this.error = '⚠️ Completa la información de tu taller para comenzar';
@@ -433,7 +464,8 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
       address: this.workshopForm.address,
       phone: this.workshopForm.phone,
       latitude: this.workshopForm.latitude,
-      longitude: this.workshopForm.longitude
+      longitude: this.workshopForm.longitude,
+      categories: this.workshopForm.categories
     };
 
     if (this.workshop) {
@@ -469,6 +501,31 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
     this.workshopForm.address = location.address;
     this.workshopForm.latitude = location.latitude;
     this.workshopForm.longitude = location.longitude;
+  }
+
+  toggleWorkshopCategory(categoryValue: string, checked: boolean): void {
+    const current = new Set(this.workshopForm.categories);
+    if (checked) {
+      current.add(categoryValue);
+    } else {
+      current.delete(categoryValue);
+    }
+    this.workshopForm.categories = Array.from(current);
+  }
+
+  isWorkshopCategorySelected(categoryValue: string): boolean {
+    return this.workshopForm.categories.includes(categoryValue);
+  }
+
+  getServiceCategoryLabel(categoryValue: string): string {
+    return SERVICE_CATEGORY_OPTIONS.find(option => option.value === categoryValue)?.label || categoryValue;
+  }
+
+  formatServiceCategories(categories: string[] | null | undefined): string {
+    if (!categories || categories.length === 0) {
+      return '';
+    }
+    return categories.map((category) => this.getServiceCategoryLabel(category)).join(', ');
   }
 
   addTechnician(): void {
@@ -603,12 +660,48 @@ export class WorkshopDashboardComponent implements OnInit, OnDestroy {
       .sort((a, b) => a.status.localeCompare(b.status));
   }
 
+  getIncidentTypeEntries(): Array<{ type: string; count: number }> {
+    if (!this.stats?.incidents_by_type) {
+      return [];
+    }
+
+    return Object.entries(this.stats.incidents_by_type)
+      .map(([type, count]) => ({ type, count: count || 0 }))
+      .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+  }
+
+  getTopIncidentZones(): IncidentZoneStat[] {
+    return this.stats?.top_incident_zones || [];
+  }
+
+  getWorkshopEfficiencySummary(): {
+    completed_incidents: number;
+    average_arrival_time_minutes: number;
+    average_service_time_minutes: number;
+    efficiency_score: number;
+  } {
+    return this.stats?.workshop_efficiency_summary || {
+      completed_incidents: 0,
+      average_arrival_time_minutes: 0,
+      average_service_time_minutes: 0,
+      efficiency_score: 0,
+    };
+  }
+
   formatMinutes(value?: number | null): string {
     const minutes = value || 0;
     if (!minutes || Number.isNaN(minutes)) {
       return '0 min';
     }
     return `${minutes.toFixed(1)} min`;
+  }
+
+  formatPercent(value?: number | null): string {
+    const percentage = value || 0;
+    if (!percentage || Number.isNaN(percentage)) {
+      return '0%';
+    }
+    return `${percentage.toFixed(1)}%`;
   }
 
   // Get technician stats for progress bars

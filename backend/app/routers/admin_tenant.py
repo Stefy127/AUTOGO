@@ -71,6 +71,7 @@ def _build_workshop_response(db: Session, workshop: Workshop) -> TenantWorkshopR
         address=workshop.address,
         latitude=workshop.latitude,
         longitude=workshop.longitude,
+        categories=workshop.categories or [],
         commission_percentage=workshop.commission_percentage,
         is_active=workshop.is_active,
         owner_id=workshop.owner_id,
@@ -202,6 +203,7 @@ def create_tenant_workshop(
         address=payload.address,
         latitude=payload.latitude,
         longitude=payload.longitude,
+        categories=payload.categories,
         commission_percentage=payload.commission_percentage,
         is_active=payload.is_active,
     )
@@ -244,6 +246,7 @@ def create_tenant_workshop_with_owner(
             address=payload.workshop.address,
             latitude=payload.workshop.latitude,
             longitude=payload.workshop.longitude,
+            categories=payload.workshop.categories,
             commission_percentage=payload.workshop.commission_percentage,
             is_active=payload.workshop.is_active,
         )
@@ -268,7 +271,7 @@ def update_tenant_workshop(
     workshop = _get_workshop_or_404(db, workshop_id)
 
     data = payload.dict(exclude_unset=True)
-    for field in ["name", "address", "latitude", "longitude", "commission_percentage", "is_active"]:
+    for field in ["name", "address", "latitude", "longitude", "commission_percentage", "is_active", "categories"]:
         if field in data:
             setattr(workshop, field, data[field])
 

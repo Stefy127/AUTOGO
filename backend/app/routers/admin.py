@@ -58,6 +58,103 @@ def _to_arrival_minutes(raw_value: int | None) -> float | None:
     return float(raw_value)
 
 
+def _normalize_incident_type(incident: Incident) -> str:
+    for field_name in ("categories", "required_categories"):
+        raw_value = getattr(incident, field_name, None)
+        if isinstance(raw_value, (list, tuple, set)):
+            for item in raw_value:
+                if item:
+                    return str(item).strip()
+        elif isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+
+    classification = getattr(incident, "classification", None)
+    if classification is not None and str(classification).strip():
+        return str(classification).strip()
+
+    return "otros"
+
+
+def _calculate_efficiency_score(completed_incidents: int, average_arrival_time_minutes: float, average_service_time_minutes: float) -> float:
+    if completed_incidents <= 0 or average_arrival_time_minutes <= 0 or average_service_time_minutes <= 0:
+        return 0.0
+
+    score = 100.0 - ((average_arrival_time_minutes + average_service_time_minutes) / 2.0)
+    return round(max(score, 0.0), 2)
+
+
+def _top_incident_zones(incidents: list[Incident]) -> list[dict[str, object]]:
+    zone_counts: dict[str, int] = {}
+
+    for incident in incidents:
+        zone = (incident.location_text or "").strip() or "Ubicación no especificada"
+        zone_counts[zone] = zone_counts.get(zone, 0) + 1
+
+    return [
+        {"zone": zone, "total_incidents": total_incidents}
+        for zone, total_incidents in sorted(
+            zone_counts.items(),
+            key=lambda item: (-item[1], item[0].lower())
+        )
+    ]
+
+
+def _incident_type_counts(incidents: list[Incident]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+
+    for incident in incidents:
+        incident_type = _normalize_incident_type(incident)
+        counts[incident_type] = counts.get(incident_type, 0) + 1
+
+    return counts
+
+
+def _build_incident_histories_map(db: Session, incident_ids: list[int]) -> dict[int, list[IncidentHistory]]:
+    if not incident_ids:
+        return {}
+
+    histories = db.query(IncidentHistory).filter(IncidentHistory.incident_id.in_(incident_ids)).order_by(IncidentHistory.timestamp.asc()).all()
+    histories_map: dict[int, list[IncidentHistory]] = {}
+
+    for history in histories:
+        histories_map.setdefault(history.incident_id, []).append(history)
+
+    return histories_map
+
+
+def _first_history_timestamp(history_rows: list[IncidentHistory], allowed_statuses: list[IncidentStatus]) -> datetime | None:
+    for history in history_rows:
+        if history.status in allowed_statuses:
+            return history.timestamp
+    return None
+
+
+def _arrival_minutes_from_history_or_estimate(incident: Incident, histories_map: dict[int, list[IncidentHistory]]) -> float | None:
+    history_rows = histories_map.get(incident.id, [])
+
+    base_time = incident.accepted_at or _first_history_timestamp(history_rows, [IncidentStatus.ACCEPTED, IncidentStatus.ASSIGNED])
+    arrival_time = incident.started_at or _first_history_timestamp(history_rows, [IncidentStatus.IN_SERVICE, IncidentStatus.IN_PROGRESS])
+
+    if base_time is not None and arrival_time is not None:
+        return max((arrival_time - base_time).total_seconds() / 60.0, 0.0)
+
+    return _to_arrival_minutes(incident.estimated_arrival_time)
+
+
+def _sla_compliance_percentage(incidents: list[Incident], histories_map: dict[int, list[IncidentHistory]]) -> float:
+    evaluated_minutes = [
+        arrival_minutes
+        for incident in incidents
+        if (arrival_minutes := _arrival_minutes_from_history_or_estimate(incident, histories_map)) is not None
+    ]
+
+    if not evaluated_minutes:
+        return 0.0
+
+    compliant = sum(1 for minutes in evaluated_minutes if minutes <= 30.0)
+    return round((compliant / len(evaluated_minutes)) * 100.0, 2)
+
+
 # ==================== WORKSHOPS MANAGEMENT ====================
 
 @router.get("/workshops", response_model=List[WorkshopResponse])
@@ -616,6 +713,8 @@ async def get_platform_stats(
     if parsed_end_exclusive is not None:
         incidents_query = incidents_query.filter(Incident.created_at < parsed_end_exclusive)
     incidents = incidents_query.all()
+    incidents_by_type = _incident_type_counts(incidents)
+    histories_map = _build_incident_histories_map(db, [incident.id for incident in incidents])
 
     offers_query = db.query(Offer)
     if workshop_id is not None:
@@ -718,6 +817,59 @@ async def get_platform_stats(
         if service_minutes_values else 0.0
     )
 
+    top_incident_zones = _top_incident_zones(incidents)
+    sla_compliance_percentage = _sla_compliance_percentage(incidents, histories_map)
+
+    workshop_efficiency_rows = []
+    incidents_by_workshop: dict[int, list[Incident]] = {}
+    for incident in incidents:
+        if incident.workshop_id is None:
+            continue
+        incidents_by_workshop.setdefault(incident.workshop_id, []).append(incident)
+
+    workshop_ids = list(incidents_by_workshop.keys())
+    workshop_names = {
+        workshop.id: workshop.name
+        for workshop in db.query(Workshop).filter(Workshop.id.in_(workshop_ids)).all()
+    } if workshop_ids else {}
+
+    for current_workshop_id, workshop_incidents in incidents_by_workshop.items():
+        completed_workshop_incidents = [item for item in workshop_incidents if item.status == IncidentStatus.COMPLETED]
+        workshop_histories_map = _build_incident_histories_map(db, [item.id for item in workshop_incidents])
+
+        arrival_minutes_values = [
+            _arrival_minutes_from_history_or_estimate(item, workshop_histories_map)
+            for item in workshop_incidents
+        ]
+        arrival_minutes_values = [value for value in arrival_minutes_values if value is not None]
+
+        service_minutes_values = [
+            (item.completed_at - item.started_at).total_seconds() / 60.0
+            for item in completed_workshop_incidents
+            if item.started_at is not None and item.completed_at is not None
+        ]
+
+        average_arrival = round(sum(arrival_minutes_values) / len(arrival_minutes_values), 2) if arrival_minutes_values else 0.0
+        average_service = round(sum(service_minutes_values) / len(service_minutes_values), 2) if service_minutes_values else 0.0
+        completed_count = len(completed_workshop_incidents)
+        efficiency_score = _calculate_efficiency_score(completed_count, average_arrival, average_service)
+
+        if efficiency_score <= 0:
+            continue
+
+        workshop_efficiency_rows.append({
+            "workshop_id": current_workshop_id,
+            "workshop_name": workshop_names.get(current_workshop_id, f"Taller {current_workshop_id}"),
+            "completed_incidents": completed_count,
+            "average_arrival_time_minutes": average_arrival,
+            "average_service_time_minutes": average_service,
+            "efficiency_score": efficiency_score,
+        })
+
+    workshop_efficiency_rows.sort(
+        key=lambda item: (-float(item["efficiency_score"]), -int(item["completed_incidents"]), str(item["workshop_name"]).lower())
+    )
+
     total_users = db.query(User).count()
     clients = db.query(User).filter(User.role == UserRole.CLIENT).count()
     workshop_users = db.query(User).filter(User.role == UserRole.WORKSHOP).count()
@@ -730,6 +882,10 @@ async def get_platform_stats(
         completed_incidents=completed_incidents,
         cancelled_incidents=cancelled_incidents,
         incidents_by_status=incidents_by_status,
+        incidents_by_type=incidents_by_type,
+        most_efficient_workshops=workshop_efficiency_rows,
+        top_incident_zones=top_incident_zones,
+        sla_compliance_percentage=sla_compliance_percentage,
         total_workshops=total_workshops,
         active_workshops=active_workshops,
         inactive_workshops=inactive_workshops,

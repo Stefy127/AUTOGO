@@ -33,7 +33,7 @@
           <h2>{{ workshop?.name || 'Taller' }}</h2>
           <p>Tenant operativo / taller registrado</p>
         </div>
-        <span class="status-badge" [ngClass]="workshop?.is_active ? 'active' : 'inactive'" *ngIf="workshop">
+        <span class="status-badge" [ngClass]="workshop.is_active ? 'active' : 'inactive'" *ngIf="workshop">
           {{ workshop.is_active ? 'Activo' : 'Inactivo' }}
         </span>
       </div>
@@ -81,6 +81,7 @@
             <div><label>Dueño</label><p>{{ workshop.owner_name || '-' }}</p></div>
             <div><label>Correo dueño</label><p>{{ workshop.owner_email || '-' }}</p></div>
             <div><label>Teléfono dueño</label><p>{{ workshop.owner_phone || '-' }}</p></div>
+            <div class="wide"><label>Categorías</label><p *ngIf="workshop.categories?.length; else noWorkshopCategories">{{ formatServiceCategories(workshop.categories) }}</p><ng-template #noWorkshopCategories><p>Sin categorías configuradas</p></ng-template></div>
           </div>
         </div>
 

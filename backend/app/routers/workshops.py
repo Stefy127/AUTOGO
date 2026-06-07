@@ -53,6 +53,103 @@ def _to_arrival_minutes(raw_value: int | None) -> float | None:
     return float(raw_value)
 
 
+def _normalize_incident_type(incident: Incident) -> str:
+    for field_name in ("categories", "required_categories"):
+        raw_value = getattr(incident, field_name, None)
+        if isinstance(raw_value, (list, tuple, set)):
+            for item in raw_value:
+                if item:
+                    return str(item).strip()
+        elif isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+
+    classification = getattr(incident, "classification", None)
+    if classification is not None and str(classification).strip():
+        return str(classification).strip()
+
+    return "otros"
+
+
+def _calculate_efficiency_score(completed_incidents: int, average_arrival_time_minutes: float, average_service_time_minutes: float) -> float:
+    if completed_incidents <= 0 or average_arrival_time_minutes <= 0 or average_service_time_minutes <= 0:
+        return 0.0
+
+    score = 100.0 - ((average_arrival_time_minutes + average_service_time_minutes) / 2.0)
+    return round(max(score, 0.0), 2)
+
+
+def _incident_type_counts(incidents: list[Incident]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+
+    for incident in incidents:
+        incident_type = _normalize_incident_type(incident)
+        counts[incident_type] = counts.get(incident_type, 0) + 1
+
+    return counts
+
+
+def _top_incident_zones(incidents: list[Incident]) -> list[dict[str, object]]:
+    zone_counts: dict[str, int] = {}
+
+    for incident in incidents:
+        zone = (incident.location_text or "").strip() or "Ubicación no especificada"
+        zone_counts[zone] = zone_counts.get(zone, 0) + 1
+
+    return [
+        {"zone": zone, "total_incidents": total_incidents}
+        for zone, total_incidents in sorted(
+            zone_counts.items(),
+            key=lambda item: (-item[1], item[0].lower())
+        )
+    ]
+
+
+def _build_incident_histories_map(db: Session, incident_ids: list[int]) -> dict[int, list[IncidentHistory]]:
+    if not incident_ids:
+        return {}
+
+    histories = db.query(IncidentHistory).filter(IncidentHistory.incident_id.in_(incident_ids)).order_by(IncidentHistory.timestamp.asc()).all()
+    histories_map: dict[int, list[IncidentHistory]] = {}
+
+    for history in histories:
+        histories_map.setdefault(history.incident_id, []).append(history)
+
+    return histories_map
+
+
+def _first_history_timestamp(history_rows: list[IncidentHistory], allowed_statuses: list[IncidentStatus]) -> datetime | None:
+    for history in history_rows:
+        if history.status in allowed_statuses:
+            return history.timestamp
+    return None
+
+
+def _arrival_minutes_from_history_or_estimate(incident: Incident, histories_map: dict[int, list[IncidentHistory]]) -> float | None:
+    history_rows = histories_map.get(incident.id, [])
+
+    base_time = incident.accepted_at or _first_history_timestamp(history_rows, [IncidentStatus.ACCEPTED, IncidentStatus.ASSIGNED])
+    arrival_time = incident.started_at or _first_history_timestamp(history_rows, [IncidentStatus.IN_SERVICE, IncidentStatus.IN_PROGRESS])
+
+    if base_time is not None and arrival_time is not None:
+        return max((arrival_time - base_time).total_seconds() / 60.0, 0.0)
+
+    return _to_arrival_minutes(incident.estimated_arrival_time)
+
+
+def _sla_compliance_percentage(incidents: list[Incident], histories_map: dict[int, list[IncidentHistory]]) -> float:
+    evaluated_minutes = [
+        arrival_minutes
+        for incident in incidents
+        if (arrival_minutes := _arrival_minutes_from_history_or_estimate(incident, histories_map)) is not None
+    ]
+
+    if not evaluated_minutes:
+        return 0.0
+
+    compliant = sum(1 for minutes in evaluated_minutes if minutes <= 30.0)
+    return round((compliant / len(evaluated_minutes)) * 100.0, 2)
+
+
 # ==================== WORKSHOP MANAGEMENT ====================
 
 @router.post("", response_model=WorkshopResponse, status_code=status.HTTP_201_CREATED)
@@ -86,6 +183,7 @@ async def create_workshop(
         address=workshop_data.address,
         latitude=workshop_data.latitude,
         longitude=workshop_data.longitude,
+        categories=workshop_data.categories,
         commission_percentage=workshop_data.commission_percentage,
         is_active=workshop_data.is_active
     )
@@ -404,12 +502,12 @@ async def get_available_incidents(
         joinedload(Incident.offers).joinedload(Offer.technician)
     ).filter(
         Incident.status.in_([IncidentStatus.PENDING, IncidentStatus.WAITING_OFFERS]),
-        Incident.workshop_id.is_(None)
+        Incident.workshop_id.is_(None),
+        Incident.categories.overlap(workshop.categories)
     ).all()
-    
+
     # TODO: Filtrar por distancia usando MapboxService
-    # Por ahora retornamos todos los incidentes pendientes
-    
+    # Por ahora retornamos solo los incidentes compatibles por categorías.
     return incidents
 
 
@@ -657,6 +755,8 @@ async def get_workshop_stats(
     if parsed_end_exclusive is not None:
         payments_query = payments_query.filter(Payment.created_at < parsed_end_exclusive)
     payments = payments_query.all()
+    incidents_by_type = _incident_type_counts(incidents)
+    histories_map = _build_incident_histories_map(db, [incident.id for incident in incidents])
 
     technicians_total = db.query(Technician).filter(Technician.workshop_id == workshop.id).count()
     technicians_available = db.query(Technician).filter(
@@ -673,6 +773,16 @@ async def get_workshop_stats(
     completed_incidents = sum(1 for i in incidents if i.status == IncidentStatus.COMPLETED)
     cancelled_incidents = sum(1 for i in incidents if i.status == IncidentStatus.CANCELLED)
     active_incidents = sum(1 for i in incidents if i.status not in [IncidentStatus.COMPLETED, IncidentStatus.CANCELLED])
+
+    assignment_minutes_values = [
+        (i.accepted_at - i.created_at).total_seconds() / 60.0
+        for i in incidents
+        if i.accepted_at is not None
+    ]
+    average_assignment_time_minutes = (
+        round(sum(assignment_minutes_values) / len(assignment_minutes_values), 2)
+        if assignment_minutes_values else 0.0
+    )
 
     offers_sent = len(offers)
     offers_accepted = sum(1 for o in offers if o.status.value == "accepted")
@@ -724,6 +834,16 @@ async def get_workshop_stats(
         if i.status in [IncidentStatus.ON_ROUTE, IncidentStatus.IN_SERVICE, IncidentStatus.IN_PROGRESS, IncidentStatus.ACCEPTED, IncidentStatus.ASSIGNED]
     )
 
+    workshop_efficiency_summary = {
+        "completed_incidents": completed_incidents,
+        "average_arrival_time_minutes": average_arrival_time_minutes,
+        "average_service_time_minutes": average_service_time_minutes,
+        "efficiency_score": _calculate_efficiency_score(completed_incidents, average_arrival_time_minutes, average_service_time_minutes),
+    }
+
+    top_incident_zones = _top_incident_zones(incidents)
+    sla_compliance_percentage = _sla_compliance_percentage(incidents, histories_map)
+
     return WorkshopStatsResponse(
         workshop_id=workshop.id,
         workshop_name=workshop.name,
@@ -732,6 +852,11 @@ async def get_workshop_stats(
         completed_incidents=completed_incidents,
         cancelled_incidents=cancelled_incidents,
         incidents_by_status=incidents_by_status,
+        average_assignment_time_minutes=average_assignment_time_minutes,
+        incidents_by_type=incidents_by_type,
+        workshop_efficiency_summary=workshop_efficiency_summary,
+        top_incident_zones=top_incident_zones,
+        sla_compliance_percentage=sla_compliance_percentage,
         offers_sent=offers_sent,
         offers_accepted=offers_accepted,
         offers_rejected=offers_rejected,

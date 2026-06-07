@@ -10,6 +10,32 @@ import {
   TenantWorkshopUserRow
 } from '../../models/models';
 
+interface ServiceCategoryOption {
+  value: string;
+  label: string;
+}
+
+const SERVICE_CATEGORY_OPTIONS: ServiceCategoryOption[] = [
+  { value: 'general_mechanics', label: 'Mecánica general' },
+  { value: 'automotive_electricity', label: 'Electricidad automotriz' },
+  { value: 'battery_start', label: 'Batería y arranque' },
+  { value: 'tires', label: 'Llantería / Neumáticos' },
+  { value: 'towing', label: 'Grúa / Remolque' },
+  { value: 'locksmith', label: 'Cerrajería automotriz' },
+  { value: 'fuel', label: 'Combustible' },
+  { value: 'brakes', label: 'Frenos' },
+  { value: 'engine', label: 'Motor' },
+  { value: 'cooling', label: 'Refrigeración' },
+  { value: 'transmission', label: 'Transmisión / Caja' },
+  { value: 'suspension_steering', label: 'Suspensión y dirección' },
+  { value: 'electronic_diagnosis', label: 'Diagnóstico electrónico' },
+  { value: 'body_paint', label: 'Chaperío y pintura' },
+  { value: 'roadside_assistance', label: 'Auxilio rápido en carretera' },
+  { value: 'preventive_maintenance', label: 'Mantenimiento preventivo' },
+  { value: 'air_conditioning', label: 'Aire acondicionado' },
+  { value: 'spare_parts', label: 'Repuestos' },
+];
+
 @Component({
   selector: 'app-admin-workshop-detail',
   templateUrl: './admin-workshop-detail.component.html',
@@ -234,6 +260,17 @@ export class AdminWorkshopDetailComponent implements OnInit {
 
   get currentUser() {
     return this.authService.currentUserValue;
+  }
+
+  getServiceCategoryLabel(categoryValue: string): string {
+    return SERVICE_CATEGORY_OPTIONS.find(option => option.value === categoryValue)?.label || categoryValue;
+  }
+
+  formatServiceCategories(categories: string[] | null | undefined): string {
+    if (!categories || categories.length === 0) {
+      return '';
+    }
+    return categories.map((category) => this.getServiceCategoryLabel(category)).join(', ');
   }
 
   private buildEmptyCreateForm() {

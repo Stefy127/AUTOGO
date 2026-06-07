@@ -128,6 +128,7 @@ export class AdminService {
     address: string;
     latitude: number;
     longitude: number;
+    categories: string[];
     commission_percentage: number;
     is_active: boolean;
   }): Observable<Workshop> {

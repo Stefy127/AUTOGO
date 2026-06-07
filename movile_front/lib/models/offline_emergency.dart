@@ -12,6 +12,7 @@ class OfflineEmergency {
   final String address;
   final double? latitude;
   final double? longitude;
+  final List<String> categories;
   final DateTime createdOfflineAt;
   final String syncStatus;
   final int syncAttempts;
@@ -33,6 +34,7 @@ class OfflineEmergency {
     required this.address,
     this.latitude,
     this.longitude,
+    this.categories = const [],
     required this.createdOfflineAt,
     required this.syncStatus,
     required this.syncAttempts,
@@ -55,6 +57,7 @@ class OfflineEmergency {
     String? address,
     double? latitude,
     double? longitude,
+    List<String>? categories,
     DateTime? createdOfflineAt,
     String? syncStatus,
     int? syncAttempts,
@@ -76,6 +79,7 @@ class OfflineEmergency {
       address: address ?? this.address,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      categories: categories ?? this.categories,
       createdOfflineAt: createdOfflineAt ?? this.createdOfflineAt,
       syncStatus: syncStatus ?? this.syncStatus,
       syncAttempts: syncAttempts ?? this.syncAttempts,
@@ -100,6 +104,7 @@ class OfflineEmergency {
       'address': address,
       'latitude': latitude,
       'longitude': longitude,
+      'categories': categories,
       'created_offline_at': createdOfflineAt.toIso8601String(),
       'sync_status': syncStatus,
       'sync_attempts': syncAttempts,
@@ -124,6 +129,7 @@ class OfflineEmergency {
       address: json['address'] as String,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
+      categories: ((json['categories'] as List?) ?? []).map((e) => e.toString()).toList(),
       createdOfflineAt: DateTime.parse(json['created_offline_at'] as String),
       syncStatus: json['sync_status'] as String,
       syncAttempts: (json['sync_attempts'] as num?)?.toInt() ?? 0,

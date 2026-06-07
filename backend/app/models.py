@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text, Float, Boolean, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text, Float, Boolean, Numeric, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -113,6 +114,7 @@ class Workshop(Base):
     address = Column(String, nullable=False)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
+    categories = Column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'::text[]"))
     commission_percentage = Column(Float, default=10.0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -211,6 +213,7 @@ class Incident(Base):
     
     # Basic info
     description = Column(Text, nullable=False)
+    categories = Column(ARRAY(Text), nullable=False, default=list, server_default=text("'{}'::text[]"))
     status = Column(Enum(IncidentStatus), default=IncidentStatus.PENDING, nullable=False)
     priority = Column(Enum(IncidentPriority), default=IncidentPriority.MEDIUM, nullable=False)
     payment_method = Column(Enum(PaymentMethod), nullable=True)

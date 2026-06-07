@@ -1,7 +1,18 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Literal, Any
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional, Literal, Any, List
 from datetime import datetime, date
 from enum import Enum
+
+from app.services.service_categories import normalize_service_categories
+
+
+class ServiceCategoriesMixin(BaseModel):
+    categories: List[str] = Field(default_factory=list)
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value):
+        return normalize_service_categories(value, required=False)
 
 
 # Enums
@@ -195,7 +206,7 @@ class RentalVehicleResponse(RentalVehicleBase):
 
 
 # Incident Schemas
-class IncidentBase(BaseModel):
+class IncidentBase(ServiceCategoriesMixin):
     description: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -207,6 +218,7 @@ class IncidentBase(BaseModel):
 
 class IncidentCreate(IncidentBase):
     vehicle_id: int
+    categories: List[str] = Field(..., min_length=1)
 
 
 class OfflineIncidentSyncRequest(BaseModel):
@@ -223,6 +235,13 @@ class OfflineIncidentSyncRequest(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     created_offline_at: datetime
+    categories: List[str] = Field(default_factory=list)
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value):
+        # Keep offline sync backwards-compatible: categories are optional
+        return normalize_service_categories(value, required=False)
 
 
 class IncidentUpdate(BaseModel):
@@ -344,15 +363,21 @@ class WorkshopBase(BaseModel):
     address: str
     latitude: float
     longitude: float
+    categories: List[str] = Field(default_factory=list)
     commission_percentage: float = 10.0
     is_active: bool = True
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value):
+        return normalize_service_categories(value, required=False)
 
 
 class WorkshopCreate(WorkshopBase):
     pass
 
 
-class WorkshopUpdate(BaseModel):
+class WorkshopUpdate(ServiceCategoriesMixin):
     name: Optional[str] = None
     address: Optional[str] = None
     latitude: Optional[float] = None
@@ -638,6 +663,11 @@ class WorkshopStatsResponse(BaseModel):
     completed_incidents: int = 0
     cancelled_incidents: int = 0
     incidents_by_status: dict[str, int] = Field(default_factory=dict)
+    average_assignment_time_minutes: float = 0.0
+    incidents_by_type: dict[str, int] = Field(default_factory=dict)
+    workshop_efficiency_summary: dict[str, Any] = Field(default_factory=dict)
+    top_incident_zones: list[dict[str, Any]] = Field(default_factory=list)
+    sla_compliance_percentage: float = 0.0
     offers_sent: int = 0
     offers_accepted: int = 0
     offers_rejected: int = 0
@@ -668,6 +698,10 @@ class AdminStatsResponse(BaseModel):
     completed_incidents: int = 0
     cancelled_incidents: int = 0
     incidents_by_status: dict[str, int] = Field(default_factory=dict)
+    incidents_by_type: dict[str, int] = Field(default_factory=dict)
+    most_efficient_workshops: list[dict[str, Any]] = Field(default_factory=list)
+    top_incident_zones: list[dict[str, Any]] = Field(default_factory=list)
+    sla_compliance_percentage: float = 0.0
 
     total_workshops: int = 0
     active_workshops: int = 0
@@ -861,6 +895,7 @@ class TenantWorkshopResponse(BaseModel):
     address: str
     latitude: float
     longitude: float
+    categories: List[str] = Field(default_factory=list)
     commission_percentage: float
     is_active: bool
     owner_id: int
@@ -879,8 +914,14 @@ class TenantWorkshopCreate(BaseModel):
     address: str = Field(..., min_length=1)
     latitude: float
     longitude: float
+    categories: List[str] = Field(default_factory=list)
     commission_percentage: float = Field(default=10.0, ge=0, le=100)
     is_active: bool = True
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value):
+        return normalize_service_categories(value, required=False)
 
 
 class TenantWorkshopOwnerCreate(BaseModel):
@@ -895,8 +936,14 @@ class TenantWorkshopDataCreate(BaseModel):
     address: str = Field(..., min_length=1)
     latitude: float
     longitude: float
+    categories: List[str] = Field(default_factory=list)
     commission_percentage: float = Field(default=10.0, ge=0, le=100)
     is_active: bool = True
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value):
+        return normalize_service_categories(value, required=False)
 
 
 class TenantWorkshopWithOwnerCreate(BaseModel):
@@ -909,8 +956,16 @@ class TenantWorkshopUpdate(BaseModel):
     address: Optional[str] = Field(default=None, min_length=1)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    categories: Optional[List[str]] = None
     commission_percentage: Optional[float] = Field(default=None, ge=0, le=100)
     is_active: Optional[bool] = None
+
+    @field_validator("categories", mode="before")
+    @classmethod
+    def validate_categories(cls, value):
+        if value is None:
+            return None
+        return normalize_service_categories(value, required=False)
 
 
 class TenantWorkshopStatusUpdate(BaseModel):

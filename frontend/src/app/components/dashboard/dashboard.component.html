@@ -155,6 +155,7 @@
           <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Prom. Asignacion</div><div class="kpi-value">{{ formatMinutes(adminStats.average_assignment_time_minutes) }}</div></div></div>
           <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Prom. Llegada</div><div class="kpi-value">{{ formatMinutes(adminStats.average_arrival_time_minutes) }}</div></div></div>
           <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Prom. Atencion</div><div class="kpi-value">{{ formatMinutes(adminStats.average_service_time_minutes) }}</div></div></div>
+          <div class="kpi-card"><div class="kpi-content"><div class="kpi-label">Cumplimiento SLA</div><div class="kpi-value">{{ formatPercent(adminStats.sla_compliance_percentage) }}</div></div></div>
         </div>
       </div>
 
@@ -171,6 +172,66 @@
             <tr *ngFor="let row of getAdminIncidentStatusEntries()">
               <td>{{ getStatusText(row.status) }}</td>
               <td>{{ row.count }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="incidents-section" *ngIf="isAdmin() && adminStats">
+        <h3 class="section-title">Incidentes por Tipo</h3>
+        <table class="status-table">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of getAdminIncidentTypeEntries()">
+              <td>{{ row.type }}</td>
+              <td>{{ row.count }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="incidents-section" *ngIf="isAdmin() && adminStats">
+        <h3 class="section-title">Talleres Más Eficientes</h3>
+        <table class="status-table">
+          <thead>
+            <tr>
+              <th>Taller</th>
+              <th>Completados</th>
+              <th>Llegada Prom.</th>
+              <th>Atención Prom.</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of getMostEfficientWorkshops()">
+              <td>{{ row.workshop_name }}</td>
+              <td>{{ row.completed_incidents }}</td>
+              <td>{{ formatMinutes(row.average_arrival_time_minutes) }}</td>
+              <td>{{ formatMinutes(row.average_service_time_minutes) }}</td>
+              <td>{{ row.efficiency_score.toFixed(2) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="incidents-section" *ngIf="isAdmin() && adminStats">
+        <h3 class="section-title">Zonas con Más Incidentes</h3>
+        <table class="status-table">
+          <thead>
+            <tr>
+              <th>Zona</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of getTopIncidentZones()">
+              <td>{{ row.zone }}</td>
+              <td>{{ row.total_incidents }}</td>
             </tr>
           </tbody>
         </table>

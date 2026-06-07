@@ -11,6 +11,32 @@ import { LocationData } from '../map-picker/map-picker.component';
 
 type TenantStatusFilter = 'all' | 'active' | 'inactive';
 
+interface ServiceCategoryOption {
+  value: string;
+  label: string;
+}
+
+const SERVICE_CATEGORY_OPTIONS: ServiceCategoryOption[] = [
+  { value: 'general_mechanics', label: 'Mecánica general' },
+  { value: 'automotive_electricity', label: 'Electricidad automotriz' },
+  { value: 'battery_start', label: 'Batería y arranque' },
+  { value: 'tires', label: 'Llantería / Neumáticos' },
+  { value: 'towing', label: 'Grúa / Remolque' },
+  { value: 'locksmith', label: 'Cerrajería automotriz' },
+  { value: 'fuel', label: 'Combustible' },
+  { value: 'brakes', label: 'Frenos' },
+  { value: 'engine', label: 'Motor' },
+  { value: 'cooling', label: 'Refrigeración' },
+  { value: 'transmission', label: 'Transmisión / Caja' },
+  { value: 'suspension_steering', label: 'Suspensión y dirección' },
+  { value: 'electronic_diagnosis', label: 'Diagnóstico electrónico' },
+  { value: 'body_paint', label: 'Chaperío y pintura' },
+  { value: 'roadside_assistance', label: 'Auxilio rápido en carretera' },
+  { value: 'preventive_maintenance', label: 'Mantenimiento preventivo' },
+  { value: 'air_conditioning', label: 'Aire acondicionado' },
+  { value: 'spare_parts', label: 'Repuestos' },
+];
+
 @Component({
   selector: 'app-admin-workshop-management',
   templateUrl: './admin-workshop-management.component.html',
@@ -47,9 +73,12 @@ export class AdminWorkshopManagementComponent implements OnInit {
     address: '',
     latitude: null as number | null,
     longitude: null as number | null,
+    categories: [] as string[],
     commission_percentage: 10,
     is_active: true
   };
+
+  serviceCategories = SERVICE_CATEGORY_OPTIONS;
 
   constructor(
     private adminService: AdminService,
@@ -129,6 +158,7 @@ export class AdminWorkshopManagementComponent implements OnInit {
       address: workshop.address,
       latitude: workshop.latitude,
       longitude: workshop.longitude,
+      categories: workshop.categories || [],
       commission_percentage: workshop.commission_percentage,
       is_active: workshop.is_active
     };
@@ -157,6 +187,7 @@ export class AdminWorkshopManagementComponent implements OnInit {
         address: this.createForm.workshop.address.trim(),
         latitude: this.createForm.workshop.latitude as number,
         longitude: this.createForm.workshop.longitude as number,
+        categories: this.createForm.workshop.categories,
         commission_percentage: Number(this.createForm.workshop.commission_percentage),
         is_active: this.createForm.workshop.is_active
       }
@@ -185,6 +216,7 @@ export class AdminWorkshopManagementComponent implements OnInit {
       address: this.editForm.address.trim(),
       latitude: this.editForm.latitude as number,
       longitude: this.editForm.longitude as number,
+      categories: this.editForm.categories,
       commission_percentage: Number(this.editForm.commission_percentage),
       is_active: this.editForm.is_active
     };
@@ -236,6 +268,38 @@ export class AdminWorkshopManagementComponent implements OnInit {
     this.editForm.longitude = location.longitude;
   }
 
+  toggleCreateCategory(categoryValue: string, checked: boolean): void {
+    const current = new Set(this.createForm.workshop.categories);
+    if (checked) {
+      current.add(categoryValue);
+    } else {
+      current.delete(categoryValue);
+    }
+    this.createForm.workshop.categories = Array.from(current);
+  }
+
+  toggleEditCategory(categoryValue: string, checked: boolean): void {
+    const current = new Set(this.editForm.categories);
+    if (checked) {
+      current.add(categoryValue);
+    } else {
+      current.delete(categoryValue);
+    }
+    this.editForm.categories = Array.from(current);
+  }
+
+  isCreateCategorySelected(categoryValue: string): boolean {
+    return this.createForm.workshop.categories.includes(categoryValue);
+  }
+
+  isEditCategorySelected(categoryValue: string): boolean {
+    return this.editForm.categories.includes(categoryValue);
+  }
+
+  getServiceCategoryLabel(categoryValue: string): string {
+    return SERVICE_CATEGORY_OPTIONS.find(option => option.value === categoryValue)?.label || categoryValue;
+  }
+
   goToDetail(workshopId: number): void {
     this.router.navigate(['/admin/gestion-talleres', workshopId]);
   }
@@ -253,6 +317,7 @@ export class AdminWorkshopManagementComponent implements OnInit {
         address: '',
         latitude: null as number | null,
         longitude: null as number | null,
+        categories: [] as string[],
         commission_percentage: 10,
         is_active: true
       }

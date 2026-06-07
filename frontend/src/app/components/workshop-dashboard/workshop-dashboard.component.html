@@ -155,6 +155,17 @@
             <label>Mecánicos:</label>
             <span>{{ technicians.length }} registrados</span>
           </div>
+          <div class="info-item full-width">
+            <label>Categorías:</label>
+            <div class="chips-row" *ngIf="workshop.categories?.length; else noCategories">
+              <span class="chip" *ngFor="let category of workshop.categories">
+                {{ getServiceCategoryLabel(category) }}
+              </span>
+            </div>
+            <ng-template #noCategories>
+              <span>Sin categorías configuradas</span>
+            </ng-template>
+          </div>
         </div>
         <div class="no-workshop" *ngIf="!workshop">
           <p>⚠️ No has configurado tu taller aún</p>
@@ -254,6 +265,94 @@
             <h4>{{ formatMinutes(stats.average_service_time_minutes) }}</h4>
             <p>Tiempo Promedio Atencion</p>
           </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-content">
+            <h4>{{ formatMinutes(stats.average_assignment_time_minutes) }}</h4>
+            <p>Tiempo Promedio Asignacion</p>
+          </div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-icon">📏</div>
+          <div class="stat-content">
+            <h4>{{ formatPercent(stats.sla_compliance_percentage) }}</h4>
+            <p>Cumplimiento SLA</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card" *ngIf="stats">
+        <h3>📊 Incidentes por Tipo</h3>
+        <div class="history-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of getIncidentTypeEntries()">
+                <td>{{ row.type }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-card" *ngIf="stats">
+        <h3>⚡ Eficiencia del Taller</h3>
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-icon">✅</div>
+            <div class="stat-content">
+              <h4>{{ getWorkshopEfficiencySummary().completed_incidents }}</h4>
+              <p>Completados</p>
+            </div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-icon">🚗</div>
+            <div class="stat-content">
+              <h4>{{ formatMinutes(getWorkshopEfficiencySummary().average_arrival_time_minutes) }}</h4>
+              <p>Llegada Promedio</p>
+            </div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-icon">🛠️</div>
+            <div class="stat-content">
+              <h4>{{ formatMinutes(getWorkshopEfficiencySummary().average_service_time_minutes) }}</h4>
+              <p>Atencion Promedio</p>
+            </div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-icon">📈</div>
+            <div class="stat-content">
+              <h4>{{ getWorkshopEfficiencySummary().efficiency_score.toFixed(2) }}</h4>
+              <p>Efficiency Score</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-card" *ngIf="stats">
+        <h3>📍 Zonas con Más Incidentes</h3>
+        <div class="history-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Zona</th>
+                <th>Cantidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of getTopIncidentZones()">
+                <td>{{ row.zone }}</td>
+                <td>{{ row.total_incidents }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -409,6 +508,20 @@
               [(ngModel)]="workshopForm.phone"
               name="phone"
               placeholder="5551234567">
+          </div>
+
+          <div class="form-group">
+            <label>Categorías del taller</label>
+            <div class="category-grid">
+              <label class="category-option" *ngFor="let option of serviceCategories">
+                <input
+                  type="checkbox"
+                  [checked]="isWorkshopCategorySelected(option.value)"
+                  (change)="toggleWorkshopCategory(option.value, ($any($event.target)).checked)">
+                <span>{{ option.label }}</span>
+              </label>
+            </div>
+            <small class="hint">Selecciona una o varias categorías que tu taller puede atender.</small>
           </div>
 
           <div class="form-group">

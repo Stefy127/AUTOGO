@@ -15,6 +15,34 @@ import '../models/models.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 enum _Step { audio, image, review, submitting }
 
+class _ServiceCategoryOption {
+  final String value;
+  final String label;
+
+  const _ServiceCategoryOption(this.value, this.label);
+}
+
+const List<_ServiceCategoryOption> _serviceCategoryOptions = [
+  _ServiceCategoryOption('general_mechanics', 'Mecánica general'),
+  _ServiceCategoryOption('automotive_electricity', 'Electricidad automotriz'),
+  _ServiceCategoryOption('battery_start', 'Batería y arranque'),
+  _ServiceCategoryOption('tires', 'Llantería / Neumáticos'),
+  _ServiceCategoryOption('towing', 'Grúa / Remolque'),
+  _ServiceCategoryOption('locksmith', 'Cerrajería automotriz'),
+  _ServiceCategoryOption('fuel', 'Combustible'),
+  _ServiceCategoryOption('brakes', 'Frenos'),
+  _ServiceCategoryOption('engine', 'Motor'),
+  _ServiceCategoryOption('cooling', 'Refrigeración'),
+  _ServiceCategoryOption('transmission', 'Transmisión / Caja'),
+  _ServiceCategoryOption('suspension_steering', 'Suspensión y dirección'),
+  _ServiceCategoryOption('electronic_diagnosis', 'Diagnóstico electrónico'),
+  _ServiceCategoryOption('body_paint', 'Chaperío y pintura'),
+  _ServiceCategoryOption('roadside_assistance', 'Auxilio rápido en carretera'),
+  _ServiceCategoryOption('preventive_maintenance', 'Mantenimiento preventivo'),
+  _ServiceCategoryOption('air_conditioning', 'Aire acondicionado'),
+  _ServiceCategoryOption('spare_parts', 'Repuestos'),
+];
+
 class EmergencyFormScreen extends StatefulWidget {
   const EmergencyFormScreen({super.key});
 
@@ -42,6 +70,7 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
   final _descController = TextEditingController();
   final _locationController = TextEditingController();
   String _priority = 'medium';
+  final List<String> _selectedCategories = [];
   List<Vehicle> _vehicles = [];
   Vehicle? _selectedVehicle;
   bool _loadingVehicles = true;
@@ -195,6 +224,10 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
       _showError('Selecciona un vehículo');
       return;
     }
+    if (_selectedCategories.isEmpty) {
+      _showError('Selecciona al menos una categoría para la emergencia');
+      return;
+    }
     setState(() => _step = _Step.submitting);
     final auth = context.read<AuthService>();
     final api = context.read<ApiService>();
@@ -229,6 +262,7 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
         '/incidents',
         {
           'description': finalDesc.isEmpty ? 'Emergencia vehicular' : finalDesc,
+          'categories': _selectedCategories,
           'vehicle_id': _selectedVehicle!.id,
           'location_text': _locationController.text.trim(),
           'location_selected': _locationSelected,
@@ -335,6 +369,7 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
           loadingVehicles: _loadingVehicles,
           selectedVehicle: _selectedVehicle,
           priority: _priority,
+          selectedCategories: _selectedCategories,
           locationSelected: _locationSelected,
           latitude: _latitude,
           longitude: _longitude,
@@ -342,6 +377,18 @@ class _EmergencyFormScreenState extends State<EmergencyFormScreen> {
           imageDescription: _imageDescription,
           onVehicleChanged: (v) => setState(() => _selectedVehicle = v),
           onPriorityChanged: (p) => setState(() => _priority = p),
+          serviceCategories: _serviceCategoryOptions,
+          onCategoryChanged: (category, selected) {
+            setState(() {
+              if (selected) {
+                if (!_selectedCategories.contains(category)) {
+                  _selectedCategories.add(category);
+                }
+              } else {
+                _selectedCategories.remove(category);
+              }
+            });
+          },
           onGetLocation: _getCurrentLocation,
           onSubmit: _submit,
         );
@@ -694,6 +741,8 @@ class _ReviewStep extends StatelessWidget {
   final bool loadingVehicles;
   final Vehicle? selectedVehicle;
   final String priority;
+  final List<String> selectedCategories;
+  final List<_ServiceCategoryOption> serviceCategories;
   final bool locationSelected;
   final double? latitude;
   final double? longitude;
@@ -701,6 +750,7 @@ class _ReviewStep extends StatelessWidget {
   final String imageDescription;
   final void Function(Vehicle?) onVehicleChanged;
   final void Function(String) onPriorityChanged;
+  final void Function(String, bool) onCategoryChanged;
   final VoidCallback onGetLocation;
   final VoidCallback onSubmit;
 
@@ -712,6 +762,8 @@ class _ReviewStep extends StatelessWidget {
     required this.loadingVehicles,
     required this.selectedVehicle,
     required this.priority,
+    required this.selectedCategories,
+    required this.serviceCategories,
     required this.locationSelected,
     required this.latitude,
     required this.longitude,
@@ -719,6 +771,7 @@ class _ReviewStep extends StatelessWidget {
     required this.imageDescription,
     required this.onVehicleChanged,
     required this.onPriorityChanged,
+    required this.onCategoryChanged,
     required this.onGetLocation,
     required this.onSubmit,
   });
@@ -793,6 +846,34 @@ class _ReviewStep extends StatelessWidget {
             maxLines: 4,
             decoration: const InputDecoration(
               hintText: 'Describe la emergencia (editado por IA o escribe tú)',
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Categories
+          const Text('Categorías de la emergencia',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: serviceCategories.map((category) {
+              final isSelected = selectedCategories.contains(category.value);
+              return FilterChip(
+                selected: isSelected,
+                label: Text(category.label),
+                onSelected: (selected) => onCategoryChanged(category.value, selected),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            selectedCategories.isEmpty
+                ? 'Debes seleccionar al menos una categoría.'
+                : 'Seleccionadas: ${selectedCategories.map((value) => serviceCategories.firstWhere((option) => option.value == value, orElse: () => _ServiceCategoryOption(value, value)).label).join(', ')}',
+            style: TextStyle(
+              fontSize: 12,
+              color: selectedCategories.isEmpty ? Colors.red : Colors.grey,
             ),
           ),
           const SizedBox(height: 20),

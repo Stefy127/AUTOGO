@@ -28,6 +28,7 @@ export interface Workshop {
   phone?: string;
   latitude?: number;
   longitude?: number;
+  categories: string[];
   commission_percentage?: number;
   commission_rate: number;
   is_active: boolean;
@@ -42,6 +43,7 @@ export interface TenantWorkshop {
   address: string;
   latitude: number;
   longitude: number;
+  categories: string[];
   commission_percentage: number;
   is_active: boolean;
   owner_id: number;
@@ -70,6 +72,7 @@ export interface TenantWorkshopCreateRequest {
   address: string;
   latitude: number;
   longitude: number;
+  categories: string[];
   commission_percentage: number;
   is_active: boolean;
 }
@@ -86,6 +89,7 @@ export interface TenantWorkshopDataCreateRequest {
   address: string;
   latitude: number;
   longitude: number;
+  categories: string[];
   commission_percentage: number;
   is_active: boolean;
 }
@@ -100,6 +104,7 @@ export interface TenantWorkshopUpdateRequest {
   address: string;
   latitude: number;
   longitude: number;
+  categories: string[];
   commission_percentage: number;
   is_active: boolean;
 }
@@ -180,6 +185,7 @@ export interface Incident {
   workshop_id?: number;
   technician_id?: number;
   description: string;
+  categories: string[];
   status: 'pending' | 'waiting_offers' | 'assigned' | 'accepted' | 'on_route' | 'in_service' | 'in_progress' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high';
   payment_method?: 'cash' | 'transfer' | 'qr';
@@ -297,6 +303,27 @@ export interface WorkshopPaymentQr {
   updated_at?: string;
 }
 
+export interface IncidentZoneStat {
+  zone: string;
+  total_incidents: number;
+}
+
+export interface WorkshopEfficiencySummary {
+  completed_incidents: number;
+  average_arrival_time_minutes: number;
+  average_service_time_minutes: number;
+  efficiency_score: number;
+}
+
+export interface EfficientWorkshopStat {
+  workshop_id: number;
+  workshop_name: string;
+  completed_incidents: number;
+  average_arrival_time_minutes: number;
+  average_service_time_minutes: number;
+  efficiency_score: number;
+}
+
 export interface WorkshopStats {
   workshop_id: number;
   workshop_name: string;
@@ -307,6 +334,11 @@ export interface WorkshopStats {
   completed_incidents: number;
   cancelled_incidents: number;
   incidents_by_status: Record<string, number>;
+  average_assignment_time_minutes: number;
+  incidents_by_type: Record<string, number>;
+  workshop_efficiency_summary: WorkshopEfficiencySummary;
+  top_incident_zones: IncidentZoneStat[];
+  sla_compliance_percentage: number;
   offers_sent: number;
   offers_accepted: number;
   offers_rejected: number;
@@ -335,6 +367,10 @@ export interface AdminStats {
   completed_incidents: number;
   cancelled_incidents: number;
   incidents_by_status: Record<string, number>;
+  incidents_by_type: Record<string, number>;
+  most_efficient_workshops: EfficientWorkshopStat[];
+  top_incident_zones: IncidentZoneStat[];
+  sla_compliance_percentage: number;
 
   total_workshops: number;
   active_workshops: number;

@@ -70,6 +70,7 @@ class Workshop {
   final double? latitude;
   final double? longitude;
   final String? phone;
+  final List<String> categories;
   final bool isActive;
   final double commissionRate;
 
@@ -80,6 +81,7 @@ class Workshop {
     this.latitude,
     this.longitude,
     this.phone,
+    this.categories = const [],
     required this.isActive,
     required this.commissionRate,
   });
@@ -92,6 +94,9 @@ class Workshop {
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
       phone: json['phone'],
+      categories: json['categories'] != null
+          ? List<String>.from(json['categories'])
+          : const [],
       isActive: json['is_active'],
       commissionRate: json['commission_rate']?.toDouble() ?? 0.1,
     );
@@ -311,6 +316,7 @@ class IncidentHistory {
 class Incident {
   final int? id;
   final String description;
+  final List<String> categories;
   final String status;
   final double? latitude;
   final double? longitude;
@@ -340,6 +346,7 @@ class Incident {
   Incident({
     this.id,
     required this.description,
+    this.categories = const [],
     this.status = 'pending',
     this.latitude,
     this.longitude,
@@ -370,6 +377,9 @@ class Incident {
     return Incident(
       id: json['id'],
       description: json['description'],
+        categories: json['categories'] != null
+          ? List<String>.from(json['categories'])
+          : const [],
       status: json['status'],
       latitude: json['latitude']?.toDouble(),
       longitude: json['longitude']?.toDouble(),
@@ -420,6 +430,7 @@ class Incident {
   Map<String, dynamic> toJson() {
     return {
       'description': description,
+      'categories': categories,
       'vehicle_id': vehicleId,
       'latitude': latitude,
       'longitude': longitude,

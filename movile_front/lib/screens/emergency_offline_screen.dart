@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../models/offline_emergency.dart';
 import '../services/offline_emergency_storage_service.dart';
 import '../services/offline_emergency_sync_service.dart';
+import '../services/service_categories.dart';
 
 class EmergencyOfflineScreen extends StatefulWidget {
   const EmergencyOfflineScreen({super.key});
@@ -38,6 +39,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
   bool _isEditing = false;
   bool _loading = true;
   bool _isSyncing = false;
+  final List<String> _selectedCategories = [];
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
@@ -136,6 +138,8 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
     _addressController.text = emergency.address;
     _latitudeController.text = emergency.latitude?.toString() ?? '';
     _longitudeController.text = emergency.longitude?.toString() ?? '';
+    _selectedCategories.clear();
+    _selectedCategories.addAll(emergency.categories);
   }
 
   void _clearForm() {
@@ -150,6 +154,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
     _addressController.clear();
     _latitudeController.clear();
     _longitudeController.clear();
+    _selectedCategories.clear();
   }
 
   String? _requiredValidator(String? value, String label) {
@@ -253,7 +258,17 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
         longitude: lng,
         syncStatus: wasFailed ? 'pending' : _activeEmergency!.syncStatus,
         lastError: wasFailed ? '' : _activeEmergency!.lastError,
+        categories: _selectedCategories,
       );
+
+      // Validate categories when saving edit
+      if (_selectedCategories.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecciona al menos una categoría.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
 
       await _storageService.updateEmergency(updated);
       if (!mounted) return;
@@ -284,6 +299,7 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
       incidentType: _incidentTypeController.text.trim(),
       description: _descriptionController.text.trim(),
       address: _addressController.text.trim(),
+      categories: _selectedCategories,
       latitude: lat,
       longitude: lng,
       createdOfflineAt: DateTime.now().toUtc(),
@@ -293,6 +309,15 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
       backendIncidentId: null,
       syncedAt: null,
     );
+
+    // Validate categories on create
+    if (_selectedCategories.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecciona al menos una categoría para la emergencia'), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     await _storageService.saveEmergency(created);
     if (!mounted) return;
@@ -560,6 +585,10 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
             Text('Dirección: ${emergency.address}'),
             if (emergency.latitude != null && emergency.longitude != null)
               Text('Lat/Lng: ${emergency.latitude}, ${emergency.longitude}'),
+            if (emergency.categories.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Categorías: ${emergency.categories.map((c) => serviceCategoryOptions.firstWhere((o) => o.value == c, orElse: () => ServiceCategoryOption(c, c)).label).join(', ')}'),
+            ],
             Text('Estado: ${emergency.syncStatus}'),
             Text('Intentos de sincronización: ${emergency.syncAttempts}'),
             Text(
@@ -709,6 +738,42 @@ class _EmergencyOfflineScreenState extends State<EmergencyOfflineScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          // Categories
+          const Text('Categorías de la emergencia', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: serviceCategoryOptions.map((category) {
+              final isSelected = _selectedCategories.contains(category.value);
+              return FilterChip(
+                selected: isSelected,
+                label: Text(category.label),
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      if (!_selectedCategories.contains(category.value)) {
+                        _selectedCategories.add(category.value);
+                      }
+                    } else {
+                      _selectedCategories.remove(category.value);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _selectedCategories.isEmpty
+                ? 'Debes seleccionar al menos una categoría.'
+                : 'Seleccionadas: ${_selectedCategories.join(', ')}',
+            style: TextStyle(
+              fontSize: 12,
+              color: _selectedCategories.isEmpty ? Colors.red : Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 12),
           TextFormField(
             controller: _clientEmailController,
             keyboardType: TextInputType.emailAddress,

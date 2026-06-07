@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { IncidentService } from '../../services/incident.service';
 import { AdminService } from '../../services/admin.service';
-import { User, Incident, AdminStats } from '../../models/models';
+import { User, Incident, AdminStats, EfficientWorkshopStat, IncidentZoneStat } from '../../models/models';
 
 interface DashboardStats {
   total: number;
@@ -89,6 +89,24 @@ export class DashboardComponent implements OnInit {
       .sort((a, b) => a.status.localeCompare(b.status));
   }
 
+  getAdminIncidentTypeEntries(): Array<{ type: string; count: number }> {
+    if (!this.adminStats?.incidents_by_type) {
+      return [];
+    }
+
+    return Object.entries(this.adminStats.incidents_by_type)
+      .map(([type, count]) => ({ type, count: count || 0 }))
+      .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+  }
+
+  getTopIncidentZones(): IncidentZoneStat[] {
+    return this.adminStats?.top_incident_zones || [];
+  }
+
+  getMostEfficientWorkshops(): EfficientWorkshopStat[] {
+    return this.adminStats?.most_efficient_workshops || [];
+  }
+
   getStatusText(status: string): string {
     const statusMap: { [key: string]: string } = {
       pending: 'Pendiente',
@@ -102,6 +120,14 @@ export class DashboardComponent implements OnInit {
       cancelled: 'Cancelada'
     };
     return statusMap[status] || status;
+  }
+
+  formatPercent(value?: number | null): string {
+    const percentage = value || 0;
+    if (!percentage || Number.isNaN(percentage)) {
+      return '0%';
+    }
+    return `${percentage.toFixed(1)}%`;
   }
 
   formatMinutes(value?: number | null): string {
